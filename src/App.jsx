@@ -28,6 +28,7 @@ function ComposeFlowApp() {
   const [includeDescendants, setIncludeDescendants] = useState(false);
   const [showInterfaces, setShowInterfaces] = useState(false);
   const [showSuper, setShowSuper] = useState(true);
+  const [layoutMode, setLayoutMode] = useState("auto-grid");
   const [selection, setSelection] = useState(null);
   const [selectedBlockName, setSelectedBlockName] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -80,7 +81,8 @@ function ComposeFlowApp() {
     showInterfaces: showInterfaces || view === "bindings" || view === "validation",
     showResources: view === "resources",
     showSuper,
-  }), [graph, scopeId, view, includeDescendants, showInterfaces, showSuper]);
+    layoutMode,
+  }), [graph, scopeId, view, includeDescendants, showInterfaces, showSuper, layoutMode]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -108,50 +110,60 @@ function ComposeFlowApp() {
     }
   }, [yamlText]);
 
+  const loadYamlFile = useCallback((text, filename) => {
+    console.info("[compose-flow] loading file", { filename, bytes: text.length });
+    setYamlText(text);
+    setCurrentFilename(filename);
+    try {
+      const parsed = parseComposeYaml(text);
+      setModel(parsed);
+      setRootName(parsed.root);
+      setScopeId(parsed.root);
+      setSelection(null);
+      setLoadError(null);
+    } catch (error) {
+      console.error("[compose-flow] failed to parse YAML", error);
+      setLoadError(error.message);
+    }
+  }, []);
+
   const handleUploadClick = useCallback(async () => {
     const result = await uploadFile();
     if (result) {
-      console.info("[compose-flow] loaded file", { filename: result.filename, bytes: result.text.length });
-      setYamlText(result.text);
-      setCurrentFilename(result.filename);
-      try {
-        const parsed = parseComposeYaml(result.text);
-        setModel(parsed);
-        setRootName(parsed.root);
-        setScopeId(parsed.root);
-        setSelection(null);
-        setLoadError(null);
-      } catch (error) {
-        console.error("[compose-flow] failed to parse uploaded YAML", error);
-        setLoadError(error.message);
-      }
+      loadYamlFile(result.text, result.filename);
     }
-  }, [uploadFile]);
+  }, [uploadFile, loadYamlFile]);
+
+  const handleLoadExample = useCallback(() => {
+    setIsLoading(true);
+    fetch("/examples/example.yaml")
+      .then((response) => response.text())
+      .then((text) => {
+        loadYamlFile(text, "example.yaml");
+      })
+      .catch((error) => {
+        console.error("[compose-flow] failed to load example", error);
+        setLoadError(error.message);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [loadYamlFile]);
 
   const onDrop = useCallback(async (event) => {
     setIsDragging(false);
     const result = await handleFileDrop(event);
     if (result) {
-      console.info("[compose-flow] loaded dropped file", { filename: result.filename, bytes: result.text.length });
-      setYamlText(result.text);
-      setCurrentFilename(result.filename);
-      try {
-        const parsed = parseComposeYaml(result.text);
-        setModel(parsed);
-        setRootName(parsed.root);
-        setScopeId(parsed.root);
-        setSelection(null);
-        setLoadError(null);
-      } catch (error) {
-        console.error("[compose-flow] failed to parse dropped YAML", error);
-        setLoadError(error.message);
-      }
+      loadYamlFile(result.text, result.filename);
     }
-  }, [handleFileDrop]);
+  }, [handleFileDrop, loadYamlFile]);
 
   const onDragOver = useCallback((event) => {
-    event.preventDefault();
-    setIsDragging(true);
+    // Only handle file drops, not ReactFlow panning
+    if (event.dataTransfer.types && event.dataTransfer.types.includes('Files')) {
+      event.preventDefault();
+      setIsDragging(true);
+    }
   }, []);
 
   const onDragLeave = useCallback((event) => {
@@ -171,6 +183,9 @@ function ComposeFlowApp() {
           <p className="current-file">Current file: {currentFilename}</p>
         </div>
         <div className="topbar__controls">
+          <button onClick={handleLoadExample} className="example-button" aria-label="Load invoice platform example" disabled={isLoading}>
+            Load Complex Example
+          </button>
           <button onClick={handleUploadClick} className="upload-button" aria-label="Upload YAML file">
             Upload YAML
           </button>
@@ -190,6 +205,15 @@ function ComposeFlowApp() {
             View
             <select value={view} onChange={(event) => setView(event.target.value)} disabled={isLoading} aria-label="Select view mode">
               {VIEWS.map((viewName) => <option key={viewName} value={viewName}>{viewName}</option>)}
+            </select>
+          </label>
+          <label>
+            Layout
+            <select value={layoutMode} onChange={(event) => setLayoutMode(event.target.value)} disabled={isLoading} aria-label="Select layout mode">
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+              <option value="grid">Grid (3 cols)</option>
+              <option value="auto-grid">Auto Grid</option>
             </select>
           </label>
           <label className="checkbox">
@@ -225,6 +249,11 @@ function ComposeFlowApp() {
               fitView
               minZoom={0.2}
               maxZoom={1.8}
+              panOnDrag={true}
+              panOnScroll={false}
+              zoomOnScroll={true}
+              zoomOnPinch={true}
+              zoomOnDoubleClick={false}
               onNodeClick={(_, node) => {
                 console.info("[compose-flow] selected node", node.data);
                 setSelection({ type: "node", data: node.data });

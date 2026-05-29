@@ -1,5 +1,7 @@
 # Compose Flow MVP
 
+[![Deploy to GitHub Pages](https://github.com/YOUR-USERNAME/compose-flow-mvp/actions/workflows/deploy.yml/badge.svg)](https://github.com/YOUR-USERNAME/compose-flow-mvp/actions/workflows/deploy.yml)
+
 React Flow MVP for visualising a Skupper VMS Compose-style YAML file.
 
 The app focuses on making bindings consumable rather than drawing every possible relationship at once. It treats the model as:
@@ -11,7 +13,7 @@ The app focuses on making bindings consumable rather than drawing every possible
 - **Generated resources**: resource chips extracted from simple block templates.
 - **Validation notes**: role mismatch, missing interfaces, implicit polarity, max-binding checks, and TODO-style compatibility notes.
 
-The bundled sample is `public/examples/nearestprime.yaml`, copied from the uploaded instance.
+The bundled sample is `public/examples/nearestprime.yaml`, copied from the uploaded instance. An additional comprehensive example is available in `example.yaml` - see `example.md` for detailed documentation of this invoice processing platform use case.
 
 ## Why React Flow
 
@@ -46,16 +48,41 @@ npm run build
 npm run preview
 ```
 
+## Deploy to GitHub Pages
+
+This project includes a GitHub Actions workflow for automatic deployment to GitHub Pages.
+
+**Quick setup:**
+1. Enable GitHub Pages in repository settings (Settings → Pages → Source: GitHub Actions)
+2. Push to `main` branch
+3. Site will be live at `https://<username>.github.io/compose-flow-mvp/`
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
 ## Use the UI
 
-### Loading Your Own YAML Files
+### Navigation
 
-You can load your own Compose YAML files in two ways:
+- **Pan**: Click and drag on empty canvas space to move around
+- **Zoom**: Use mouse wheel or pinch gesture
+- **Fit View**: Click the fit-view button in controls (bottom-left)
+- **MiniMap**: Use the mini-map (bottom-right) for overview and quick navigation
 
-1. **Upload Button**: Click the "Upload YAML" button in the top bar to select a file
-2. **Drag and Drop**: Drag a YAML file from your file manager and drop it anywhere on the workspace
+See [INTERACTION_GUIDE.md](INTERACTION_GUIDE.md) for detailed interaction documentation.
+
+### Loading YAML Files
+
+You can load Compose YAML files in three ways:
+
+1. **Load Complex Example**: Click the "Load Complex Example" button to load the comprehensive invoice platform example (12 blocks, 24 instances, 23 bindings)
+2. **Upload Button**: Click the "Upload YAML" button in the top bar to select a file from your computer
+3. **Drag and Drop**: Drag a YAML file from your file manager and drop it anywhere on the workspace
 
 The app will automatically parse and visualize your file. The current filename is shown below the title.
+
+**Bundled Examples:**
+- `nearestprime.yaml` - Simple example (default on load)
+- `example.yaml` - Complex invoice processing platform (click "Load Complex Example" button)
 
 ### Recommended Workflow
 
@@ -65,6 +92,11 @@ The app will automatically parse and visualize your file. The current filename i
 4. Click an edge to inspect the binding.
 5. Use **resources** to see Kubernetes/Skupper generated resource chips.
 6. Use **validation** to expose role/polarity/max-binding notes.
+7. Try different **Layout** options:
+   - **Auto Grid** - Adaptive square grid (default)
+   - **Horizontal** - Left-to-right flow
+   - **Vertical** - Top-to-bottom flow
+   - **Grid (3 cols)** - Fixed 3-column grid
 
 The default is deliberately scoped. Enable **include descendants** only when you need a deeper view.
 
@@ -124,7 +156,7 @@ The test compares the normalized graph against `tests/golden/nearestprime-flow.j
 
 ## Known limitations
 
-- Layout is deterministic but simple. Add ELK later if large graphs need crossing reduction.
+- Layout algorithms are simple (horizontal, vertical, grid). Add ELK later if large graphs need crossing reduction or advanced auto-layout.
 - Polarity is reported as implicit when the YAML omits it. The MVP does not infer the project runtime defaults.
 - Block-type compatibility is intentionally reported as an info note because the source model treats it as a TODO.
 - Template rendering is not executed. Generated resources are extracted from template text by scanning for `apiVersion` and `kind`.

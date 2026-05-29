@@ -13,9 +13,17 @@ const LEAF_HEIGHT = 180;
 const GROUP_MIN_WIDTH = 360;
 const GROUP_MIN_HEIGHT = 260;
 const PADDING_X = 48;
+const PADDING_Y = 48;
 const PADDING_TOP = 92;
 const GAP_X = 44;
 const GAP_Y = 36;
+
+const LAYOUT_MODES = {
+  HORIZONTAL: "horizontal",
+  VERTICAL: "vertical",
+  GRID: "grid",
+  AUTO_GRID: "auto-grid",
+};
 
 export function makeFlowElements(graph, options) {
   const {
@@ -25,6 +33,7 @@ export function makeFlowElements(graph, options) {
     showInterfaces = view === "bindings" || view === "validation",
     showResources = view === "resources",
     showSuper = true,
+    layoutMode = LAYOUT_MODES.AUTO_GRID,
   } = options;
 
   console.info("[compose-flow] making flow elements", options);
@@ -41,8 +50,8 @@ export function makeFlowElements(graph, options) {
   const visibleIds = new Set();
   collectVisible(root.id, 0, maxDepth, childrenByParent, visibleIds);
 
-  const layout = computeLayout(root.id, childrenByParent, visibleIds);
-  assignPositions(root.id, childrenByParent, visibleIds, layout, 0, 0);
+  const layout = computeLayout(root.id, childrenByParent, visibleIds, layoutMode);
+  assignPositions(root.id, childrenByParent, visibleIds, layout, layoutMode, 0, 0);
 
   const nodes = [];
   emitNodes(root.id, null, childrenByParent, visibleIds, layout, instanceById, nodes, {
@@ -62,15 +71,11 @@ export function makeFlowElements(graph, options) {
 
 function bindingToEdge(binding, { showInterfaces, view }) {
   const isSuper = binding.kind === "super";
-  const sourceHandle = showInterfaces ? sourceHandleId(binding.source.interfaceName) : undefined;
-  const targetHandle = showInterfaces ? targetHandleId(binding.target.interfaceName) : undefined;
 
-  return {
+  const edge = {
     id: binding.id,
     source: binding.source.instanceId,
     target: binding.target.instanceId,
-    sourceHandle,
-    targetHandle,
     type: "smoothstep",
     label: isSuper ? binding.label : binding.label,
     animated: view === "validation" ? false : isSuper,
@@ -78,6 +83,14 @@ function bindingToEdge(binding, { showInterfaces, view }) {
     className: isSuper ? "edge-super" : "edge-binding",
     data: { binding },
   };
+
+  // Only add handle properties if interfaces are shown
+  if (showInterfaces) {
+    edge.sourceHandle = sourceHandleId(binding.source.interfaceName);
+    edge.targetHandle = targetHandleId(binding.target.interfaceName);
+  }
+
+  return edge;
 }
 
 function emitNodes(id, parentId, childrenByParent, visibleIds, layout, instanceById, out, viewOptions) {
@@ -113,7 +126,7 @@ function emitNodes(id, parentId, childrenByParent, visibleIds, layout, instanceB
   }
 }
 
-function computeLayout(id, childrenByParent, visibleIds, layout = new Map()) {
+function computeLayout(id, childrenByParent, visibleIds, layoutMode, layout = new Map()) {
   const children = (childrenByParent.get(id) ?? []).filter((child) => visibleIds.has(child.id));
 
   if (!children.length) {
@@ -121,35 +134,123 @@ function computeLayout(id, childrenByParent, visibleIds, layout = new Map()) {
     return layout;
   }
 
-  let width = PADDING_X;
-  let maxHeight = 0;
-
   for (const child of children) {
-    computeLayout(child.id, childrenByParent, visibleIds, layout);
-    const childBox = layout.get(child.id);
-    width += childBox.width + GAP_X;
-    maxHeight = Math.max(maxHeight, childBox.height);
+    computeLayout(child.id, childrenByParent, visibleIds, layoutMode, layout);
   }
 
-  width = Math.max(GROUP_MIN_WIDTH, width + PADDING_X - GAP_X);
-  const height = Math.max(GROUP_MIN_HEIGHT, PADDING_TOP + maxHeight + GAP_Y);
+  let width, height;
+
+  switch (layoutMode) {
+    case LAYOUT_MODES.VERTICAL: {
+      let maxWidth = 0;
+      let totalHeight = PADDING_TOP;
+      for (const child of children) {
+        const childBox = layout.get(child.id);
+        maxWidth = Math.max(maxWidth, childBox.width);
+        totalHeight += childBox.height + GAP_Y;
+      }
+      width = Math.max(GROUP_MIN_WIDTH, PADDING_X + maxWidth + PADDING_X);
+      height = Math.max(GROUP_MIN_HEIGHT, totalHeight + PADDING_Y - GAP_Y);
+      break;
+    }
+
+    case LAYOUT_MODES.GRID:
+    case LAYOUT_MODES.AUTO_GRID: {
+      const cols = layoutMode === LAYOUT_MODES.AUTO_GRID
+        ? Math.ceil(Math.sqrt(children.length))
+        : Math.min(3, children.length);
+      const rows = Math.ceil(children.length / cols);
+
+      let maxChildWidth = 0;
+      let maxChildHeight = 0;
+      for (const child of children) {
+        const childBox = layout.get(child.id);
+        maxChildWidth = Math.max(maxChildWidth, childBox.width);
+        maxChildHeight = Math.max(maxChildHeight, childBox.height);
+      }
+
+      width = Math.max(GROUP_MIN_WIDTH, PADDING_X + (cols * (maxChildWidth + GAP_X)) - GAP_X + PADDING_X);
+      height = Math.max(GROUP_MIN_HEIGHT, PADDING_TOP + (rows * (maxChildHeight + GAP_Y)) - GAP_Y + PADDING_Y);
+      break;
+    }
+
+    case LAYOUT_MODES.HORIZONTAL:
+    default: {
+      let totalWidth = PADDING_X;
+      let maxHeight = 0;
+      for (const child of children) {
+        const childBox = layout.get(child.id);
+        totalWidth += childBox.width + GAP_X;
+        maxHeight = Math.max(maxHeight, childBox.height);
+      }
+      width = Math.max(GROUP_MIN_WIDTH, totalWidth + PADDING_X - GAP_X);
+      height = Math.max(GROUP_MIN_HEIGHT, PADDING_TOP + maxHeight + GAP_Y);
+      break;
+    }
+  }
+
   layout.set(id, { width, height, x: 0, y: 0 });
   return layout;
 }
 
-function assignPositions(id, childrenByParent, visibleIds, layout, x, y) {
+function assignPositions(id, childrenByParent, visibleIds, layout, layoutMode, x, y) {
   const box = layout.get(id);
   box.x = x;
   box.y = y;
 
   const children = (childrenByParent.get(id) ?? []).filter((child) => visibleIds.has(child.id));
-  let cursorX = PADDING_X;
-  for (const child of children) {
-    const childBox = layout.get(child.id);
-    childBox.x = cursorX;
-    childBox.y = PADDING_TOP;
-    cursorX += childBox.width + GAP_X;
-    assignPositions(child.id, childrenByParent, visibleIds, layout, childBox.x, childBox.y);
+
+  switch (layoutMode) {
+    case LAYOUT_MODES.VERTICAL: {
+      let cursorY = PADDING_TOP;
+      for (const child of children) {
+        const childBox = layout.get(child.id);
+        childBox.x = PADDING_X;
+        childBox.y = cursorY;
+        cursorY += childBox.height + GAP_Y;
+        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, childBox.x, childBox.y);
+      }
+      break;
+    }
+
+    case LAYOUT_MODES.GRID:
+    case LAYOUT_MODES.AUTO_GRID: {
+      const cols = layoutMode === LAYOUT_MODES.AUTO_GRID
+        ? Math.ceil(Math.sqrt(children.length))
+        : Math.min(3, children.length);
+
+      let maxChildWidth = 0;
+      let maxChildHeight = 0;
+      for (const child of children) {
+        const childBox = layout.get(child.id);
+        maxChildWidth = Math.max(maxChildWidth, childBox.width);
+        maxChildHeight = Math.max(maxChildHeight, childBox.height);
+      }
+
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        const childBox = layout.get(child.id);
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        childBox.x = PADDING_X + col * (maxChildWidth + GAP_X);
+        childBox.y = PADDING_TOP + row * (maxChildHeight + GAP_Y);
+        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, childBox.x, childBox.y);
+      }
+      break;
+    }
+
+    case LAYOUT_MODES.HORIZONTAL:
+    default: {
+      let cursorX = PADDING_X;
+      for (const child of children) {
+        const childBox = layout.get(child.id);
+        childBox.x = cursorX;
+        childBox.y = PADDING_TOP;
+        cursorX += childBox.width + GAP_X;
+        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, childBox.x, childBox.y);
+      }
+      break;
+    }
   }
 }
 

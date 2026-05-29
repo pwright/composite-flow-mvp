@@ -29,9 +29,14 @@ button, select, textarea { font: inherit; }
 .topbar p { margin: 0; color: #cbd5e1; }
 .topbar .current-file { margin-top: 2px; font-size: 11px; color: #94a3b8; }
 .topbar__controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; justify-content: end; }
-.upload-button { border: 0; border-radius: 8px; padding: 6px 12px; background: #2563eb; color: white; cursor: pointer; font-size: 12px; transition: background 0.2s; }
-.upload-button:hover { background: #1d4ed8; }
-.upload-button:disabled { background: #64748b; cursor: not-allowed; }
+.upload-button,
+.example-button { border: 0; border-radius: 8px; padding: 6px 12px; background: #2563eb; color: white; cursor: pointer; font-size: 12px; transition: background 0.2s; }
+.upload-button:hover,
+.example-button:hover { background: #1d4ed8; }
+.upload-button:disabled,
+.example-button:disabled { background: #64748b; cursor: not-allowed; }
+.example-button { background: #059669; }
+.example-button:hover { background: #047857; }
 .topbar label { display: grid; gap: 4px; font-size: 12px; color: #cbd5e1; }
 .topbar select { min-width: 180px; border-radius: 8px; border: 1px solid #475569; padding: 6px 8px; background: #1f2937; color: white; }
 .topbar select:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -1,0 +1,1133 @@
+##  
+## INVOICE PROCESSING PLATFORM — End-to-End VMS Example  
+##  
+## Reuses from library (already in tests/blocks.yaml):  
+##   library/tcp-connection, postgres/engine, postgres/volume  
+##  
+## Site Classes:  
+##   hq     — Central datacenter: databases, Redis queue  
+##   api    — DMZ / edge: API gateway, ingress  
+##   worker — Compute: microservices, background workers  
+##  
+## Block hierarchy:  
+##   invoice-platform  (toplevel)  
+##   ├── invoice-api/ingress          (ingress)  
+##   ├── invoice-api                  (component)  
+##   ├── stock-service/subsystem      (composite component)  
+##   │   ├── stock-service            (component)  
+##   │   ├── postgres/engine          [library]  
+##   │   ├── postgres/volume          [library]  
+##   │   └── library/tcp-connection   [library]  
+##   ├── pricing-service/subsystem    (composite component)  
+##   │   ├── pricing-service          (component)  
+##   │   ├── postgres/engine          [library]  
+##   │   ├── postgres/volume          [library]  
+##   │   └── library/tcp-connection   [library]  
+##   ├── redis/engine                 (component)  
+##   ├── invoice-worker               (component)  
+##   ├── postgres/engine              [library] — invoice DB  
+##   ├── postgres/volume              [library]  
+##   └── library/tcp-connection x5   [library] — all cross-service links  
+##  
+  
+## ============================================================
+## LIBRARY BLOCKS
+## These are reusable building blocks referenced by the platform
+## ============================================================
+
+## ── postgres/engine ──────────────────────────────────────────
+## PostgreSQL database engine
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: postgres/engine
+type: skupperx.io/component
+spec:
+  config:
+    POSTGRES_DB:
+      type: string
+      default: postgres
+    POSTGRES_USER:
+      type: string
+      default: postgres
+    POSTGRES_PASSWORD:
+      type: string
+      default: postgres
+    imageVersion:
+      type: string
+      default: "15"
+    selectorKey:
+      type: string-name
+      default: block
+    selectorValue:
+      type: string-name
+      default: postgres
+  interfaces:
+    postgres:
+      role: accept
+      maxBindings: unlimited
+      data:
+        port: 5432
+    files:
+      role: mount
+      data:
+        volumeSize: 5Gi
+  bodyStyle: simple
+  body:
+  - targetPlatforms: [sk2, kube]
+    template: |
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: postgres-{{.ident}}
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            {{.selectorKey}}: {{.selectorValue}}
+        template:
+          metadata:
+            labels:
+              {{.selectorKey}}: {{.selectorValue}}
+          spec:
+            containers:
+            - name: postgres
+              image: postgres:{{.imageVersion}}
+              imagePullPolicy: IfNotPresent
+              ports:
+              - containerPort: {{$localif.postgres.port}}
+              env:
+              - name: POSTGRES_DB
+                value: {{.POSTGRES_DB}}
+              - name: POSTGRES_USER
+                value: {{.POSTGRES_USER}}
+              - name: POSTGRES_PASSWORD
+                value: {{.POSTGRES_PASSWORD}}
+              volumeMounts:
+              - mountPath: /var/lib/postgresql/data
+                name: pgdata
+            volumes:
+            - name: pgdata
+              emptyDir:
+                sizeLimit: {{$localif.files.volumeSize}}
+
+## ── postgres/volume ──────────────────────────────────────────
+## Persistent volume for PostgreSQL data
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: postgres/volume
+type: skupperx.io/component
+spec:
+  config:
+    storageClass:
+      type: string
+      default: standard
+    capacity:
+      type: string
+      default: 5Gi
+    namePrefix:
+      type: string-name
+      default: postgres-pvc
+  interfaces:
+    mountpoint:
+      role: mount
+      data:
+        volumeSize: 5Gi
+  bodyStyle: simple
+  body:
+  - targetPlatforms: [sk2, kube]
+    template: |
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{.namePrefix}}-{{.ident}}
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        storageClassName: {{.storageClass}}
+        resources:
+          requests:
+            storage: {{.capacity}}
+
+## ── library/tcp-connection ───────────────────────────────────
+## TCP connection binding between components
+---
+apiVersion: skupperx.io/compose/v1alpha1
+kind: Block
+metadata:
+  name: library/tcp-connection
+type: skupperx.io/component
+spec:
+  config:
+    keyPrefix:
+      type: string-name
+      default: tcp
+    protocol:
+      type: string
+      default: tcp
+    connectorType:
+      type: enum
+      typeValues: [selector, direct]
+      default: selector
+    distribution:
+      type: enum
+      typeValues: [balanced, closest]
+      default: balanced
+    priority:
+      type: string
+      default: "5"
+    networkPolicyOnAcceptor:
+      type: bool
+      default: false
+    networkPolicyOnConnector:
+      type: bool
+      default: false
+    vanFlowTransport:
+      type: bool
+      default: false
+    vanFlowProtocol:
+      type: bool
+      default: false
+  interfaces:
+    acceptor:
+      role: accept
+    connector:
+      role: connect
+  bodyStyle: simple
+  body:
+  - targetPlatforms: [sk2]
+    description: "Skupper TCP connector configuration"
+    template: |
+      # Skupper connector: {{.keyPrefix}}-{{.ident}}
+      # Protocol: {{.protocol}}
+      # Distribution: {{.distribution}}
+      # Priority: {{.priority}}
+
+## ============================================================
+## APPLICATION BLOCKS
+## ============================================================
+
+## ============================================================
+## BLOCK 1: invoice-api
+## Type: skupperx.io/component  |  bodyStyle: simple
+##
+## Features demonstrated:
+##   - Multiple interfaces: one accept + four connect
+##   - All config types: string, string-name, numeric, bool, enum
+##   - $localif.<name> for every connect interface
+##   - $site.name for site-aware labelling
+##   - Conditional template block ({{-if}} / {{-else}} / {{-end}})
+##   - targetPlatforms
+## ============================================================
+
+---
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: invoice-api  
+type: skupperx.io/component  
+spec:  
+  config:  
+    replicas:  
+      type: numeric  
+      default: 2  
+    selectorKey:  
+      type: string-name  
+      default: application  
+    selectorValue:  
+      type: string-name  
+      default: invoice-api  
+    logLevel:  
+      type: enum  
+      typeValues: [debug, info, warn, error]  
+      default: info  
+    enableMetrics:  
+      type: bool  
+      description: "Expose a Prometheus /metrics endpoint"  
+      default: true  
+    metricsPort:  
+      type: numeric  
+      default: 9090  
+    imageVersion:  
+      type: string  
+      default: latest  
+  interfaces:  
+    http:  
+      role: accept  
+      data:  
+        port: 8080  
+    stock:  
+      role: connect  
+      data:  
+        host: stock-svc  
+        port: 8081  
+    pricing:  
+      role: connect  
+      data:  
+        host: pricing-svc  
+        port: 8082  
+    database:  
+      role: connect  
+      data:  
+        host: invoice-db  
+        port: 5432  
+    queue:  
+      role: connect  
+      data:  
+        host: redis  
+        port: 6379  
+  bodyStyle: simple  
+  body:  
+  - targetPlatforms: [sk2, kube]  
+    template: |  
+      ---  
+      apiVersion: apps/v1  
+      kind: Deployment  
+      metadata:  
+        name: invoice-api-{{.ident}}  
+        labels:  
+          {{.selectorKey}}: {{.selectorValue}}  
+          site: {{$site.name}}  
+      spec:  
+        replicas: {{.replicas}}  
+        selector:  
+          matchLabels:  
+            {{.selectorKey}}: {{.selectorValue}}  
+        template:  
+          metadata:  
+            labels:  
+              {{.selectorKey}}: {{.selectorValue}}  
+          spec:  
+            containers:  
+            - name: invoice-api  
+              image: quay.io/example/invoice-api:{{.imageVersion}}  
+              imagePullPolicy: Always  
+              ports:  
+              - containerPort: {{$localif.http.port}}  
+                name: http  
+              {{- if .enableMetrics}}  
+              - containerPort: {{.metricsPort}}  
+                name: metrics  
+              {{- end}}  
+              env:  
+              - name: LOG_LEVEL  
+                value: {{.logLevel}}  
+              - name: SITE_NAME  
+                value: {{$site.name}}  
+              - name: STOCK_HOST  
+                value: {{$localif.stock.host}}  
+              - name: STOCK_PORT  
+                value: "{{$localif.stock.port}}"  
+              - name: PRICING_HOST  
+                value: {{$localif.pricing.host}}  
+              - name: PRICING_PORT  
+                value: "{{$localif.pricing.port}}"  
+              - name: DB_HOST  
+                value: {{$localif.database.host}}  
+              - name: DB_PORT  
+                value: "{{$localif.database.port}}"  
+              - name: REDIS_HOST  
+                value: {{$localif.queue.host}}  
+              - name: REDIS_PORT  
+                value: "{{$localif.queue.port}}"  
+              livenessProbe:  
+                httpGet:  
+                  path: /healthz  
+                  port: {{$localif.http.port}}  
+                initialDelaySeconds: 30  
+                periodSeconds: 10  
+      ---  
+      apiVersion: v1  
+      kind: Service  
+      metadata:  
+        name: invoice-api-{{.ident}}  
+      spec:  
+        selector:  
+          {{.selectorKey}}: {{.selectorValue}}  
+        ports:  
+        - name: http  
+          port: {{$localif.http.port}}  
+          targetPort: {{$localif.http.port}}  
+  
+## ============================================================  
+## BLOCK 2: stock-service  
+## Type: skupperx.io/component  |  bodyStyle: simple  
+##  
+## Features demonstrated:  
+##   - bool config (cacheEnabled) driving a conditional env block  
+##   - numeric config (cacheTTL)  
+##   - $localif for a connect interface  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: stock-service  
+type: skupperx.io/component  
+spec:  
+  config:  
+    replicas:  
+      type: numeric  
+      default: 1  
+    selectorKey:  
+      type: string-name  
+      default: application  
+    selectorValue:  
+      type: string-name  
+      default: stock-service  
+    cacheEnabled:  
+      type: bool  
+      description: "Enable in-memory stock data cache"  
+      default: true  
+    cacheTTL:  
+      type: numeric  
+      description: "Cache TTL in seconds"  
+      default: 300  
+    imageVersion:  
+      type: string  
+      default: latest  
+  interfaces:  
+    http:  
+      role: accept  
+      data:  
+        port: 8081  
+    database:  
+      role: connect  
+      data:  
+        host: stock-db  
+        port: 5432  
+  bodyStyle: simple  
+  body:  
+  - targetPlatforms: [sk2, kube]  
+    template: |  
+      ---  
+      apiVersion: apps/v1  
+      kind: Deployment  
+      metadata:  
+        name: stock-service-{{.ident}}  
+      spec:  
+        replicas: {{.replicas}}  
+        selector:  
+          matchLabels:  
+            {{.selectorKey}}: {{.selectorValue}}  
+        template:  
+          metadata:  
+            labels:  
+              {{.selectorKey}}: {{.selectorValue}}  
+          spec:  
+            containers:  
+            - name: stock-service  
+              image: quay.io/example/stock-service:{{.imageVersion}}  
+              imagePullPolicy: Always  
+              ports:  
+              - containerPort: {{$localif.http.port}}  
+              env:  
+              - name: DB_HOST  
+                value: {{$localif.database.host}}  
+              - name: DB_PORT  
+                value: "{{$localif.database.port}}"  
+              - name: SITE_NAME  
+                value: {{$site.name}}  
+              {{- if .cacheEnabled}}  
+              - name: CACHE_ENABLED  
+                value: "true"  
+              - name: CACHE_TTL  
+                value: "{{.cacheTTL}}"  
+              {{- else}}  
+              - name: CACHE_ENABLED  
+                value: "false"  
+              {{- end}}  
+              livenessProbe:  
+                httpGet:  
+                  path: /healthz  
+                  port: {{$localif.http.port}}  
+                initialDelaySeconds: 20  
+                periodSeconds: 10  
+  
+## ============================================================  
+## BLOCK 3: pricing-service  
+## Type: skupperx.io/component  |  bodyStyle: simple  
+##  
+## Features demonstrated:  
+##   - enum config (pricingStrategy) injected as an env var  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: pricing-service  
+type: skupperx.io/component  
+spec:  
+  config:  
+    replicas:  
+      type: numeric  
+      default: 1  
+    selectorKey:  
+      type: string-name  
+      default: application  
+    selectorValue:  
+      type: string-name  
+      default: pricing-service  
+    pricingStrategy:  
+      type: enum  
+      typeValues: [standard, premium, dynamic]  
+      description: "Pricing algorithm to apply"  
+      default: standard  
+    imageVersion:  
+      type: string  
+      default: latest  
+  interfaces:  
+    http:  
+      role: accept  
+      data:  
+        port: 8082  
+    database:  
+      role: connect  
+      data:  
+        host: pricing-db  
+        port: 5432  
+  bodyStyle: simple  
+  body:  
+  - targetPlatforms: [sk2, kube]  
+    template: |  
+      ---  
+      apiVersion: apps/v1  
+      kind: Deployment  
+      metadata:  
+        name: pricing-service-{{.ident}}  
+      spec:  
+        replicas: {{.replicas}}  
+        selector:  
+          matchLabels:  
+            {{.selectorKey}}: {{.selectorValue}}  
+        template:  
+          metadata:  
+            labels:  
+              {{.selectorKey}}: {{.selectorValue}}  
+          spec:  
+            containers:  
+            - name: pricing-service  
+              image: quay.io/example/pricing-service:{{.imageVersion}}  
+              imagePullPolicy: Always  
+              ports:  
+              - containerPort: {{$localif.http.port}}  
+              env:  
+              - name: DB_HOST  
+                value: {{$localif.database.host}}  
+              - name: DB_PORT  
+                value: "{{$localif.database.port}}"  
+              - name: PRICING_STRATEGY  
+                value: {{.pricingStrategy}}  
+              - name: SITE_NAME  
+                value: {{$site.name}}  
+              livenessProbe:  
+                httpGet:  
+                  path: /healthz  
+                  port: {{$localif.http.port}}  
+                initialDelaySeconds: 20  
+                periodSeconds: 10  
+  
+## ============================================================  
+## BLOCK 4: redis/engine  
+## Type: skupperx.io/component  |  bodyStyle: simple  
+##  
+## Features demonstrated:  
+##   - maxBindings: unlimited  (multiple clients can bind to queue)  
+##   - mount interface (files) — same pattern as postgres/engine  
+##   - enum config (evictionPolicy)  
+##   - string config (maxMemory)  
+##   - $localif.files.volumeSize from the mount interface  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: redis/engine  
+type: skupperx.io/component  
+spec:  
+  config:  
+    selectorKey:  
+      type: string-name  
+      default: block  
+    selectorValue:  
+      type: string-name  
+      default: redis  
+    maxMemory:  
+      type: string  
+      description: "Redis maxmemory setting, e.g. 256mb"  
+      default: 256mb  
+    evictionPolicy:  
+      type: enum  
+      typeValues: [noeviction, allkeys-lru, volatile-lru, allkeys-random, volatile-ttl]  
+      default: allkeys-lru  
+    imageVersion:  
+      type: string  
+      default: "7"  
+  interfaces:  
+    queue:  
+      role: accept  
+      maxBindings: unlimited  
+      data:  
+        port: 6379  
+    files:  
+      role: mount  
+      data:  
+        volumeSize: 2Gi  
+  bodyStyle: simple  
+  body:  
+  - targetPlatforms: [sk2, kube]  
+    template: |  
+      ---  
+      apiVersion: apps/v1  
+      kind: Deployment  
+      metadata:  
+        name: redis-{{.ident}}  
+      spec:  
+        replicas: 1  
+        selector:  
+          matchLabels:  
+            {{.selectorKey}}: {{.selectorValue}}  
+        template:  
+          metadata:  
+            labels:  
+              {{.selectorKey}}: {{.selectorValue}}  
+          spec:  
+            containers:  
+            - name: redis  
+              image: redis:{{.imageVersion}}  
+              imagePullPolicy: IfNotPresent  
+              ports:  
+              - containerPort: {{$localif.queue.port}}  
+              command:  
+              - redis-server  
+              - --maxmemory  
+              - {{.maxMemory}}  
+              - --maxmemory-policy  
+              - {{.evictionPolicy}}  
+              volumeMounts:  
+              - mountPath: /data  
+                name: redis-data  
+            volumes:  
+            - name: redis-data  
+              emptyDir:  
+                sizeLimit: {{$localif.files.volumeSize}}  
+  
+## ============================================================  
+## BLOCK 5: invoice-worker  
+## Type: skupperx.io/component  |  bodyStyle: simple  
+##  
+## Features demonstrated:  
+##   - Two connect interfaces (queue + database)  
+##   - bool + numeric config combination (enableRetry / maxRetries)  
+##   - Conditional env vars driven by enableRetry  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: invoice-worker  
+type: skupperx.io/component  
+spec:  
+  config:  
+    replicas:  
+      type: numeric  
+      description: "Parallel worker replicas"  
+      default: 1  
+    selectorKey:  
+      type: string-name  
+      default: application  
+    selectorValue:  
+      type: string-name  
+      default: invoice-worker  
+    batchSize:  
+      type: numeric  
+      description: "Invoices processed per batch"  
+      default: 10  
+    enableRetry:  
+      type: bool  
+      default: true  
+    maxRetries:  
+      type: numeric  
+      default: 3  
+    imageVersion:  
+      type: string  
+      default: latest  
+  interfaces:  
+    queue:  
+      role: connect  
+      data:  
+        host: redis  
+        port: 6379  
+    database:  
+      role: connect  
+      data:  
+        host: invoice-db  
+        port: 5432  
+  bodyStyle: simple  
+  body:  
+  - targetPlatforms: [sk2, kube]  
+    template: |  
+      ---  
+      apiVersion: apps/v1  
+      kind: Deployment  
+      metadata:  
+        name: invoice-worker-{{.ident}}  
+      spec:  
+        replicas: {{.replicas}}  
+        selector:  
+          matchLabels:  
+            {{.selectorKey}}: {{.selectorValue}}  
+        template:  
+          metadata:  
+            labels:  
+              {{.selectorKey}}: {{.selectorValue}}  
+          spec:  
+            containers:  
+            - name: invoice-worker  
+              image: quay.io/example/invoice-worker:{{.imageVersion}}  
+              imagePullPolicy: Always  
+              env:  
+              - name: REDIS_HOST  
+                value: {{$localif.queue.host}}  
+              - name: REDIS_PORT  
+                value: "{{$localif.queue.port}}"  
+              - name: DB_HOST  
+                value: {{$localif.database.host}}  
+              - name: DB_PORT  
+                value: "{{$localif.database.port}}"  
+              - name: BATCH_SIZE  
+                value: "{{.batchSize}}"  
+              - name: SITE_NAME  
+                value: {{$site.name}}  
+              {{- if .enableRetry}}  
+              - name: ENABLE_RETRY  
+                value: "true"  
+              - name: MAX_RETRIES  
+                value: "{{.maxRetries}}"  
+              {{- else}}  
+              - name: ENABLE_RETRY  
+                value: "false"  
+              {{- end}}  
+  
+## ============================================================  
+## BLOCK 6: invoice-api/ingress  
+## Type: skupperx.io/ingress  |  bodyStyle: simple  
+##  
+## Features demonstrated:  
+##   - skupperx.io/ingress block type  
+##   - bool config (tlsEnabled) driving a conditional TLS spec  
+##   - $localif on a connect interface  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: invoice-api/ingress  
+type: skupperx.io/ingress  
+spec:  
+  config:  
+    hostname:  
+      type: string  
+      default: invoice.example.com  
+    namePrefix:  
+      type: string-name  
+      default: invoice-ingress  
+    tlsEnabled:  
+      type: bool  
+      default: true  
+    tlsSecretName:  
+      type: string  
+      default: invoice-tls-secret  
+  interfaces:  
+    connector:  
+      role: connect  
+      data:  
+        host: invoice-api  
+        port: 8080  
+  bodyStyle: simple  
+  body:  
+  - targetPlatforms: [sk2, kube]  
+    template: |  
+      ---  
+      apiVersion: networking.k8s.io/v1  
+      kind: Ingress  
+      metadata:  
+        name: {{.namePrefix}}-{{.ident}}  
+        annotations:  
+          nginx.ingress.kubernetes.io/rewrite-target: /  
+      spec:  
+        ingressClassName: nginx  
+        {{- if .tlsEnabled}}  
+        tls:  
+        - hosts:  
+          - {{.hostname}}  
+          secretName: {{.tlsSecretName}}  
+        {{- end}}  
+        rules:  
+        - host: {{.hostname}}  
+          http:  
+            paths:  
+            - path: /  
+              pathType: Prefix  
+              backend:  
+                service:  
+                  name: {{$localif.connector.host}}  
+                  port:  
+                    number: {{$localif.connector.port}}  
+  
+## ============================================================  
+## BLOCK 7: stock-service/subsystem  
+## Type: skupperx.io/component  |  bodyStyle: composite  
+##  
+## Features demonstrated:  
+##   - Composite block encapsulating a service + its own DB  
+##   - super binding: exposes stock-service's http interface  
+##     upward so the parent can bind to it  
+##   - Internal wiring via library/tcp-connection  
+##   - siteClasses per child (worker vs hq)  
+##   - config override on a child block (POSTGRES_DB)  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: stock-service/subsystem  
+type: skupperx.io/component  
+spec:  
+  interfaces:  
+    http:  
+      role: accept  
+  bodyStyle: composite  
+  body:  
+    service:  
+      block: stock-service  
+      siteClasses:  
+      - worker  
+      bindings:  
+        http:  
+          super: http          # propagates http up to the subsystem boundary  
+    db:  
+      block: postgres/engine  
+      siteClasses:  
+      - hq  
+      config:  
+        POSTGRES_DB: stock-db  
+        POSTGRES_USER: stockuser  
+        POSTGRES_PASSWORD: stockpass  
+    store:  
+      block: postgres/volume  
+      bindings:  
+        mountpoint:  
+          block: db  
+          blockInterface: files  
+    svc-to-db:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: stock-pg  
+        protocol: postgres  
+        connectorType: selector  
+        networkPolicyOnAcceptor: true  
+        networkPolicyOnConnector: true  
+      bindings:  
+        connector:  
+          block: service  
+          blockInterface: database  
+        acceptor:  
+          block: db  
+          blockInterface: postgres  
+  
+## ============================================================  
+## BLOCK 8: pricing-service/subsystem  
+## Type: skupperx.io/component  |  bodyStyle: composite  
+##  
+## Features demonstrated:  
+##   - Same composite pattern as stock-service/subsystem  
+##   - config override on child: pricingStrategy set to dynamic  
+##     (overrides the block's default of "standard")  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: pricing-service/subsystem  
+type: skupperx.io/component  
+spec:  
+  interfaces:  
+    http:  
+      role: accept  
+  bodyStyle: composite  
+  body:  
+    service:  
+      block: pricing-service  
+      siteClasses:  
+      - worker  
+      config:  
+        pricingStrategy: dynamic   # override default "standard"  
+      bindings:  
+        http:  
+          super: http  
+    db:  
+      block: postgres/engine  
+      siteClasses:  
+      - hq  
+      config:  
+        POSTGRES_DB: pricing-db  
+        POSTGRES_USER: pricinguser  
+        POSTGRES_PASSWORD: pricingpass  
+    store:  
+      block: postgres/volume  
+      bindings:  
+        mountpoint:  
+          block: db  
+          blockInterface: files  
+    svc-to-db:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: pricing-pg  
+        protocol: postgres  
+        connectorType: selector  
+        networkPolicyOnAcceptor: true  
+      bindings:  
+        connector:  
+          block: service  
+          blockInterface: database  
+        acceptor:  
+          block: db  
+          blockInterface: postgres  
+  
+## ============================================================  
+## BLOCK 9: invoice-platform  
+## Type: skupperx.io/toplevel  |  bodyStyle: composite  
+##  
+## Features demonstrated:  
+##   - skupperx.io/toplevel block type (root of the application)  
+##   - Nested composite blocks (subsystems) alongside leaf blocks  
+##   - siteClasses on every child  
+##   - config overrides at the toplevel (replicas, logLevel, etc.)  
+##   - distribution: closest + priority on latency-sensitive path  
+##   - vanFlowTransport + vanFlowProtocol on the queue connections  
+##   - networkPolicyOnAcceptor + networkPolicyOnConnector on DB links  
+##   - Binding to an interface exposed via super (stock.http,  
+##     pricing.http are propagated up from the subsystems)  
+## ============================================================  
+  
+---  
+apiVersion: skupperx.io/compose/v1alpha1  
+kind: Block  
+metadata:  
+  name: invoice-platform  
+type: skupperx.io/toplevel  
+spec:  
+  bodyStyle: composite  
+  body:  
+  
+    ## ── Ingress ──────────────────────────────────────────────  
+    ingress:  
+      block: invoice-api/ingress  
+      siteClasses:  
+      - api  
+      config:  
+        hostname: invoice.example.com  
+        tlsEnabled: true  
+  
+    ## ── API layer ────────────────────────────────────────────  
+    api:  
+      block: invoice-api  
+      siteClasses:  
+      - api  
+      config:  
+        replicas: 3  
+        logLevel: warn  
+        enableMetrics: true  
+  
+    ## ── Microservice subsystems (each bundles service + DB) ──  
+    stock:  
+      block: stock-service/subsystem  
+      siteClasses:  
+      - worker  
+      - hq  
+  
+    pricing:  
+      block: pricing-service/subsystem  
+      siteClasses:  
+      - worker  
+      - hq  
+  
+    ## ── Invoice database ─────────────────────────────────────  
+    invoice-db:  
+      block: postgres/engine  
+      siteClasses:  
+      - hq  
+      config:  
+        POSTGRES_DB: invoices  
+        POSTGRES_USER: invoiceuser  
+        POSTGRES_PASSWORD: invoicepass  
+        imageVersion: "15"  
+  
+    invoice-store:  
+      block: postgres/volume  
+      config:  
+        storageClass: ibmc-vpc-block-10iops-tier  
+        capacity: 20Gi  
+      bindings:  
+        mountpoint:  
+          block: invoice-db  
+          blockInterface: files  
+  
+    ## ── Redis message queue ───────────────────────────────────  
+    queue:  
+      block: redis/engine  
+      siteClasses:  
+      - hq  
+      config:  
+        maxMemory: 512mb  
+        evictionPolicy: allkeys-lru  
+  
+    ## ── Background workers ───────────────────────────────────  
+    worker:  
+      block: invoice-worker  
+      siteClasses:  
+      - worker  
+      config:  
+        replicas: 3  
+        batchSize: 25  
+        enableRetry: true  
+        maxRetries: 5  
+  
+    ## ── Connections ──────────────────────────────────────────  
+  
+    # External ingress → API  
+    ingress-to-api:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: http-ingress  
+        protocol: http  
+        connectorType: selector  
+      bindings:  
+        acceptor:  
+          block: api  
+          blockInterface: http  
+        connector:  
+          block: ingress  
+          blockInterface: connector  
+  
+    # API → Stock service  
+    # distribution: closest reduces latency for synchronous lookups  
+    # priority: "7" gives this path preferential forwarding  
+    api-to-stock:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: stock-http  
+        protocol: http  
+        connectorType: selector  
+        distribution: closest  
+        priority: "7"  
+        networkPolicyOnAcceptor: true  
+      bindings:  
+        acceptor:  
+          block: stock          # binds to the http interface propagated  
+          blockInterface: http  # up from stock-service/subsystem via super  
+        connector:  
+          block: api  
+          blockInterface: stock  
+  
+    # API → Pricing service  
+    api-to-pricing:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: pricing-http  
+        protocol: http  
+        connectorType: selector  
+        distribution: balanced  
+        networkPolicyOnAcceptor: true  
+      bindings:  
+        acceptor:  
+          block: pricing  
+          blockInterface: http  
+        connector:  
+          block: api  
+          blockInterface: pricing  
+  
+    # API → Invoice database  
+    # Both-side network policies lock down DB access  
+    api-to-invoice-db:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: invoice-pg  
+        protocol: postgres  
+        connectorType: selector  
+        networkPolicyOnAcceptor: true  
+        networkPolicyOnConnector: true  
+      bindings:  
+        acceptor:  
+          block: invoice-db  
+          blockInterface: postgres  
+        connector:  
+          block: api  
+          blockInterface: database  
+  
+    # API → Redis queue  
+    # vanFlow enabled for observability on the async path  
+    api-to-queue:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: api-redis  
+        protocol: redis  
+        connectorType: selector  
+        vanFlowTransport: true  
+        vanFlowProtocol: true  
+        networkPolicyOnAcceptor: true  
+      bindings:  
+        acceptor:  
+          block: queue  
+          blockInterface: queue  
+        connector:  
+          block: api  
+          blockInterface: queue  
+  
+    # Worker → Invoice database  
+    worker-to-invoice-db:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: worker-pg  
+        protocol: postgres  
+        connectorType: selector  
+        networkPolicyOnAcceptor: true  
+        networkPolicyOnConnector: true  
+      bindings:  
+        acceptor:  
+          block: invoice-db  
+          blockInterface: postgres  
+        connector:  
+          block: worker  
+          blockInterface: database  
+  
+    # Worker → Redis queue  
+    worker-to-queue:  
+      block: library/tcp-connection  
+      config:  
+        keyPrefix: worker-redis  
+        protocol: redis  
+        connectorType: selector  
+        vanFlowTransport: true  
+        networkPolicyOnAcceptor: true  
+      bindings:  
+        acceptor:  
+          block: queue  
+          blockInterface: queue  
+        connector:  
+          block: worker  
+          blockInterface: queue
+          

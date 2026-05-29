@@ -10,6 +10,44 @@ This document summarizes the improvements made to the Compose Flow MVP applicati
 - **Root Cause**: The `computeLayout` function was returning a box object instead of the layout Map
 - **Fix**: Changed function to return the layout Map itself, and updated child layout access to use the map
 
+### ReactFlow Panning Disabled ✅
+- **File**: `src/App.jsx:161-164`
+- **Issue**: Cannot pan/drag the canvas with click and drag (cursor suggests it's possible)
+- **Root Cause**: File drop `onDragOver` handler was preventing all drag events, including ReactFlow's pan gesture
+- **Fix**: Added check to only prevent default for actual file drops (`event.dataTransfer.types.includes('Files')`), allowing ReactFlow pan to work normally
+
+### Edge Handle Connection Error ✅
+- **File**: `src/compose/flowElements.js:72-93`
+- **Issue**: React Flow error: "Couldn't create edge for source handle id: null"
+- **Root Cause**: When `showInterfaces` is false, edges were setting `sourceHandle` and `targetHandle` to `undefined`, which React Flow converted to the string `"null"` and tried to find handles that don't exist
+- **Fix**: Only add `sourceHandle` and `targetHandle` properties to edge objects when `showInterfaces` is true. When handles aren't shown, edges connect to node centers (no handle properties)
+
+## Deployment
+
+### GitHub Pages Support ✅
+- **Files**: `.github/workflows/deploy.yml`, `vite.config.js`
+- **Description**: Automated deployment to GitHub Pages via GitHub Actions
+- **Features**:
+  - Automatic deployment on push to `main` branch
+  - Manual deployment trigger option
+  - Optimized build with code splitting
+  - Correct base path handling for GitHub Pages subdirectory
+  - Caches dependencies for faster builds
+- **Guides**: See `DEPLOYMENT.md` and `GITHUB_PAGES_SETUP.md`
+
+## New Features
+
+### Layout Direction Options ✅
+- **Files**: `src/compose/flowElements.js`, `src/App.jsx`
+- **Description**: Added four layout algorithms for flexible visualization
+- **Options**:
+  - **Auto Grid** - Adaptive square grid based on child count (default)
+  - **Horizontal** - Left-to-right flow (original behavior)
+  - **Vertical** - Top-to-bottom flow
+  - **Grid (3 cols)** - Fixed 3-column grid layout
+- **UI**: Dropdown selector in top toolbar
+- **Documentation**: See `LAYOUT_GUIDE.md` for detailed comparison
+
 ## Completed Improvements
 
 ### 1. Error Boundary Component ✅
@@ -76,9 +114,10 @@ This document summarizes the improvements made to the Compose Flow MVP applicati
 - **Enhancements**:
   - Shows current filename in header
   - Better disabled state styling for controls
-  - Hover effects on upload button
+  - Hover effects on buttons
   - Consistent visual feedback
   - Improved meta description for SEO
+  - "Load Complex Example" button for easy access to invoice platform demo
 
 ## Technical Details
 
