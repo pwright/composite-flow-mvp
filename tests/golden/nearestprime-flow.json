@@ -1,0 +1,1971 @@
+{
+  "root": "nearestprime/container",
+  "blocks": [
+    {
+      "name": "library/tcp-connection",
+      "type": "skupperx.io/connector",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {
+        "platform": "skupper-v2"
+      },
+      "bodyStyle": "simple",
+      "configSchema": {
+        "keyPrefix": {
+          "type": "string-name",
+          "description": "Prefix annotation for the generated routing keys",
+          "default": "tcp"
+        },
+        "distribution": {
+          "type": "enum",
+          "typeValues": [
+            "balanced",
+            "closest"
+          ],
+          "description": "Distribution algorithm used in the network for service traffic",
+          "default": "balanced"
+        },
+        "priority": {
+          "type": "enum",
+          "typeValues": [
+            "lowest",
+            "1",
+            "2",
+            "3",
+            "normal",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "highest"
+          ],
+          "description": "Priority used to forward service traffic through the network",
+          "default": "normal"
+        },
+        "protocol": {
+          "type": "string-name",
+          "description": "Application protocol that runs over the transport",
+          "default": "none"
+        },
+        "connectorType": {
+          "type": "enum",
+          "typeValues": [
+            "host",
+            "selector"
+          ],
+          "description": "How the connector locates target processes",
+          "default": "selector"
+        },
+        "networkPolicyOnAcceptor": {
+          "type": "bool",
+          "description": "Generate network policy to match the acceptor",
+          "default": false
+        },
+        "networkPolicyOnConnector": {
+          "type": "bool",
+          "description": "Generate network policy to match the connector",
+          "default": false
+        },
+        "vanFlowTransport": {
+          "type": "bool",
+          "description": "Generate vanFlow transport events",
+          "default": false
+        },
+        "vanFlowProtocol": {
+          "type": "bool",
+          "description": "Generate vanFlow protocol events",
+          "default": false
+        },
+        "requiredAverageRate": {
+          "type": "numeric",
+          "description": "Expected average bandwidth usage"
+        },
+        "requiredPeakRate": {
+          "type": "numeric",
+          "description": "Expected peak bandwidth usage"
+        },
+        "requiredLatency": {
+          "type": "numeric",
+          "description": "Minimum expected network latency"
+        }
+      },
+      "interfaces": [
+        {
+          "id": "library/tcp-connection.acceptor",
+          "name": "acceptor",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "library/tcp-connection",
+          "maxBindings": 1,
+          "data": {}
+        },
+        {
+          "id": "library/tcp-connection.connector",
+          "name": "connector",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "library/tcp-connection",
+          "maxBindings": 1,
+          "data": {}
+        }
+      ],
+      "body": [
+        {
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites",
+          "template": "---\napiVersion: skupper.io/v2alpha1\nkind: Connector\nmetadata:\n  name: connector-{{.ident}}\nspec:\n  type: tcp\n  selector: {{$affblock.selectorKey}}={{$affblock.selectorValue}}\n  port: {{$affif.port}}\n  routingKey: {{.keyPrefix}}{{.name}}\n{{- if .networkPolicyOnAcceptor}}\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: ingress-policy-{{.ident}}\nspec:\n  podSelector:\n    matchLabels:\n      {{$affblock.selectorKey}} : {{$affblock.selectorValue}}\n  policyTypes:\n  - Ingress\n  ingress:\n  - from:\n    - podSelector:\n        matchLabels:\n          skupper.io/component: router\n    ports:\n    - protocol: TCP\n      port: {{$affif.port}}\n{{-end}}\n"
+        },
+        {
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites",
+          "template": "---\napiVersion: skupper.io/v2alpha1\nkind: Listener\nmetadata:\n  name: listener-{{.ident}}\nspec:\n  type: tcp\n  host: {{$affif.host}}\n  port: {{$affif.port}}\n  routingKey: {{.keyPrefix}}{{.name}}\n{{- if .networkPolicyOnConnector}}\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: egress-policy-{{.ident}}\nspec:\n  podSelector:\n    matchLabels:\n      {{$affblock.selectorKey}} : {{$affblock.selectorValue}}\n  policyTypes:\n  - Egress\n  egress:\n  - to:\n    - podSelector:\n        matchLabels:\n          skupper.io/component: router\n    ports:\n    - protocol: TCP\n      port: {{$affif.port}}\n{{-end}}\n"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "skupper.io/v2alpha1",
+          "kind": "Connector",
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites"
+        },
+        {
+          "id": "body-0-doc-1",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "NetworkPolicy",
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites"
+        },
+        {
+          "id": "body-1-doc-0",
+          "apiVersion": "skupper.io/v2alpha1",
+          "kind": "Listener",
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites"
+        },
+        {
+          "id": "body-1-doc-1",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "NetworkPolicy",
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites"
+        }
+      ],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "type": "skupperx.io/connector",
+        "metadata": {
+          "name": "library/tcp-connection",
+          "annotations": {
+            "platform": "skupper-v2"
+          }
+        },
+        "spec": {
+          "config": {
+            "keyPrefix": {
+              "type": "string-name",
+              "description": "Prefix annotation for the generated routing keys",
+              "default": "tcp"
+            },
+            "distribution": {
+              "type": "enum",
+              "typeValues": [
+                "balanced",
+                "closest"
+              ],
+              "description": "Distribution algorithm used in the network for service traffic",
+              "default": "balanced"
+            },
+            "priority": {
+              "type": "enum",
+              "typeValues": [
+                "lowest",
+                "1",
+                "2",
+                "3",
+                "normal",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "highest"
+              ],
+              "description": "Priority used to forward service traffic through the network",
+              "default": "normal"
+            },
+            "protocol": {
+              "type": "string-name",
+              "description": "Application protocol that runs over the transport",
+              "default": "none"
+            },
+            "connectorType": {
+              "type": "enum",
+              "typeValues": [
+                "host",
+                "selector"
+              ],
+              "description": "How the connector locates target processes",
+              "default": "selector"
+            },
+            "networkPolicyOnAcceptor": {
+              "type": "bool",
+              "description": "Generate network policy to match the acceptor",
+              "default": false
+            },
+            "networkPolicyOnConnector": {
+              "type": "bool",
+              "description": "Generate network policy to match the connector",
+              "default": false
+            },
+            "vanFlowTransport": {
+              "type": "bool",
+              "description": "Generate vanFlow transport events",
+              "default": false
+            },
+            "vanFlowProtocol": {
+              "type": "bool",
+              "description": "Generate vanFlow protocol events",
+              "default": false
+            },
+            "requiredAverageRate": {
+              "type": "numeric",
+              "description": "Expected average bandwidth usage"
+            },
+            "requiredPeakRate": {
+              "type": "numeric",
+              "description": "Expected peak bandwidth usage"
+            },
+            "requiredLatency": {
+              "type": "numeric",
+              "description": "Minimum expected network latency"
+            }
+          },
+          "interfaces": {
+            "acceptor": {
+              "role": "accept"
+            },
+            "connector": {
+              "role": "connect"
+            }
+          },
+          "bodyStyle": "simple",
+          "body": [
+            {
+              "affinity": [
+                "acceptor"
+              ],
+              "targetPlatforms": [
+                "sk2"
+              ],
+              "description": "Interface to Skupper-v2 acceptors on kubernetes sites",
+              "template": "---\napiVersion: skupper.io/v2alpha1\nkind: Connector\nmetadata:\n  name: connector-{{.ident}}\nspec:\n  type: tcp\n  selector: {{$affblock.selectorKey}}={{$affblock.selectorValue}}\n  port: {{$affif.port}}\n  routingKey: {{.keyPrefix}}{{.name}}\n{{- if .networkPolicyOnAcceptor}}\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: ingress-policy-{{.ident}}\nspec:\n  podSelector:\n    matchLabels:\n      {{$affblock.selectorKey}} : {{$affblock.selectorValue}}\n  policyTypes:\n  - Ingress\n  ingress:\n  - from:\n    - podSelector:\n        matchLabels:\n          skupper.io/component: router\n    ports:\n    - protocol: TCP\n      port: {{$affif.port}}\n{{-end}}\n"
+            },
+            {
+              "affinity": [
+                "connector"
+              ],
+              "targetPlatforms": [
+                "sk2"
+              ],
+              "description": "Interface to Skupper-v2 connectors on kubernetes sites",
+              "template": "---\napiVersion: skupper.io/v2alpha1\nkind: Listener\nmetadata:\n  name: listener-{{.ident}}\nspec:\n  type: tcp\n  host: {{$affif.host}}\n  port: {{$affif.port}}\n  routingKey: {{.keyPrefix}}{{.name}}\n{{- if .networkPolicyOnConnector}}\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: egress-policy-{{.ident}}\nspec:\n  podSelector:\n    matchLabels:\n      {{$affblock.selectorKey}} : {{$affblock.selectorValue}}\n  policyTypes:\n  - Egress\n  egress:\n  - to:\n    - podSelector:\n        matchLabels:\n          skupper.io/component: router\n    ports:\n    - protocol: TCP\n      port: {{$affif.port}}\n{{-end}}\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "nearestprime",
+      "type": "skupperx.io/component",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "simple",
+      "configSchema": {
+        "replicas": {
+          "type": "numeric",
+          "default": 1
+        },
+        "selectorKey": {
+          "type": "string",
+          "default": "application"
+        },
+        "selectorValue": {
+          "type": "string",
+          "default": "nearestprime"
+        }
+      },
+      "interfaces": [
+        {
+          "id": "nearestprime.postgres",
+          "name": "postgres",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "nearestprime",
+          "maxBindings": 1,
+          "data": {
+            "host": "database",
+            "port": 5432
+          }
+        },
+        {
+          "id": "nearestprime.control",
+          "name": "control",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "nearestprime",
+          "maxBindings": 1,
+          "data": {
+            "port": 8000
+          }
+        }
+      ],
+      "body": [
+        {
+          "targetPlatforms": [
+            "sk2",
+            "podman-sk2"
+          ],
+          "template": "---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: nearestprime-{{.ident}}\nspec:\n  replicas: {{.replicas}}\n  selector:\n    matchLabels:\n      {{.selectorKey}}: {{.selectorValue}}\n  template:\n    metadata:\n      labels:\n        {{.selectorKey}}: {{.selectorValue}}\n    spec:\n      containers:\n      - name: nearestprime\n        image: quay.io/tedlross/nearestprime:latest\n        imagePullPolicy: Always\n        livenessProbe:\n          failureThreshold: 3\n          httpGet:\n            path: /healthz\n            port: {{$localif.control.port}}\n            scheme: HTTP\n          initialDelaySeconds: 60\n          periodSeconds: 10\n          successThreshold: 1\n          timeoutSeconds: 5\n        ports:\n        - containerPort: {{$localif.control.port}}\n        env:\n        - name: DDW_USER\n          value: access\n        - name: DDW_PASSWORD\n          value: demopass\n        - name: DDW_HOST\n          value: {{$localif.postgres.host}}\n        - name: DDW_SITENAME\n          value: {{$site.name}}\n"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "affinity": [],
+          "targetPlatforms": [
+            "sk2",
+            "podman-sk2"
+          ],
+          "description": ""
+        }
+      ],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "nearestprime"
+        },
+        "type": "skupperx.io/component",
+        "spec": {
+          "config": {
+            "replicas": {
+              "type": "numeric",
+              "default": 1
+            },
+            "selectorKey": {
+              "type": "string",
+              "default": "application"
+            },
+            "selectorValue": {
+              "type": "string",
+              "default": "nearestprime"
+            }
+          },
+          "interfaces": {
+            "postgres": {
+              "role": "connect",
+              "data": {
+                "host": "database",
+                "port": 5432
+              }
+            },
+            "control": {
+              "role": "accept",
+              "data": {
+                "port": 8000
+              }
+            }
+          },
+          "bodyStyle": "simple",
+          "body": [
+            {
+              "targetPlatforms": [
+                "sk2",
+                "podman-sk2"
+              ],
+              "template": "---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: nearestprime-{{.ident}}\nspec:\n  replicas: {{.replicas}}\n  selector:\n    matchLabels:\n      {{.selectorKey}}: {{.selectorValue}}\n  template:\n    metadata:\n      labels:\n        {{.selectorKey}}: {{.selectorValue}}\n    spec:\n      containers:\n      - name: nearestprime\n        image: quay.io/tedlross/nearestprime:latest\n        imagePullPolicy: Always\n        livenessProbe:\n          failureThreshold: 3\n          httpGet:\n            path: /healthz\n            port: {{$localif.control.port}}\n            scheme: HTTP\n          initialDelaySeconds: 60\n          periodSeconds: 10\n          successThreshold: 1\n          timeoutSeconds: 5\n        ports:\n        - containerPort: {{$localif.control.port}}\n        env:\n        - name: DDW_USER\n          value: access\n        - name: DDW_PASSWORD\n          value: demopass\n        - name: DDW_HOST\n          value: {{$localif.postgres.host}}\n        - name: DDW_SITENAME\n          value: {{$site.name}}\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "postgres/engine",
+      "type": "skupperx.io/component",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "simple",
+      "configSchema": {
+        "selectorKey": {
+          "type": "string-name",
+          "default": "block"
+        },
+        "selectorValue": {
+          "type": "string-name",
+          "default": "postgresql"
+        },
+        "POSTGRES_DB": {
+          "type": "string",
+          "default": "demo-db"
+        },
+        "POSTGRES_USER": {
+          "type": "string",
+          "default": "access"
+        },
+        "POSTGRES_PASSWORD": {
+          "type": "string",
+          "default": "demopass"
+        },
+        "imageVersion": {
+          "type": "string",
+          "default": "15"
+        }
+      },
+      "interfaces": [
+        {
+          "id": "postgres/engine.postgres",
+          "name": "postgres",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "postgres/engine",
+          "maxBindings": "unlimited",
+          "data": {
+            "port": 5432
+          }
+        },
+        {
+          "id": "postgres/engine.files",
+          "name": "files",
+          "role": "mount",
+          "polarity": null,
+          "blockType": "postgres/engine",
+          "maxBindings": 1,
+          "data": {
+            "volumeSize": "5Gi"
+          }
+        }
+      ],
+      "body": [
+        {
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "template": "---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: postgres-{{.ident}}\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      {{.selectorKey}}: {{.selectorValue}}\n  template:\n    metadata:\n      labels:\n        {{.selectorKey}}: {{.selectorValue}}\n    spec:\n      containers:\n      - name: postgres\n        image: postgres:{{.imageVersion}}\n        imagePullPolicy: \"IfNotPresent\"\n        ports:\n        - containerPort: {{$localif.postgres.port}}\n        env:\n        - name: POSTGRES_DB\n          value: {{.POSTGRES_DB}}\n        - name: POSTGRES_USER\n          value: {{.POSTGRES_USER}}\n        - name: POSTGRES_PASSWORD\n          value: {{.POSTGRES_PASSWORD}}\n        volumeMounts:\n        - mountPath: /var/lib/postgresql/data\n          name: postgresdb\n      volumes:\n      - name: postgresdb\n        emptyDir:\n          sizeLimit: {{$localif.files.volumeSize}}\n"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "affinity": [],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        }
+      ],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "postgres/engine"
+        },
+        "type": "skupperx.io/component",
+        "spec": {
+          "config": {
+            "selectorKey": {
+              "type": "string-name",
+              "default": "block"
+            },
+            "selectorValue": {
+              "type": "string-name",
+              "default": "postgresql"
+            },
+            "POSTGRES_DB": {
+              "type": "string",
+              "default": "demo-db"
+            },
+            "POSTGRES_USER": {
+              "type": "string",
+              "default": "access"
+            },
+            "POSTGRES_PASSWORD": {
+              "type": "string",
+              "default": "demopass"
+            },
+            "imageVersion": {
+              "type": "string",
+              "default": "15"
+            }
+          },
+          "interfaces": {
+            "postgres": {
+              "role": "accept",
+              "maxBindings": "unlimited",
+              "data": {
+                "port": 5432
+              }
+            },
+            "files": {
+              "role": "mount",
+              "data": {
+                "volumeSize": "5Gi"
+              }
+            }
+          },
+          "bodyStyle": "simple",
+          "body": [
+            {
+              "targetPlatforms": [
+                "sk2",
+                "kube"
+              ],
+              "template": "---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: postgres-{{.ident}}\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      {{.selectorKey}}: {{.selectorValue}}\n  template:\n    metadata:\n      labels:\n        {{.selectorKey}}: {{.selectorValue}}\n    spec:\n      containers:\n      - name: postgres\n        image: postgres:{{.imageVersion}}\n        imagePullPolicy: \"IfNotPresent\"\n        ports:\n        - containerPort: {{$localif.postgres.port}}\n        env:\n        - name: POSTGRES_DB\n          value: {{.POSTGRES_DB}}\n        - name: POSTGRES_USER\n          value: {{.POSTGRES_USER}}\n        - name: POSTGRES_PASSWORD\n          value: {{.POSTGRES_PASSWORD}}\n        volumeMounts:\n        - mountPath: /var/lib/postgresql/data\n          name: postgresdb\n      volumes:\n      - name: postgresdb\n        emptyDir:\n          sizeLimit: {{$localif.files.volumeSize}}\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "postgres/volume",
+      "type": "skupperx.io/connector",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "simple",
+      "configSchema": {
+        "storageClass": {
+          "type": "string",
+          "default": "ibmc-vpc-block-10iops-tier"
+        },
+        "accessModes": {
+          "type": "string",
+          "default": "ReadWriteMany"
+        },
+        "capacity": {
+          "type": "string",
+          "default": "5Gi"
+        }
+      },
+      "interfaces": [
+        {
+          "id": "postgres/volume.mountpoint",
+          "name": "mountpoint",
+          "role": "mount",
+          "polarity": null,
+          "blockType": "postgres/volume",
+          "maxBindings": 1,
+          "data": {}
+        }
+      ],
+      "body": [
+        {
+          "affinity": "mountpoint",
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "template": "---\napiVersion: v1\nkind: PersistentVolume\nmetadata:\n  name: postgres-pv-{{.ident}}\nspec:\n  storageClassName: {{.storageClass}}\n  capacity:\n    storage: {{.capacity}}\n  accessModes:\n  - {{.accessModes}}\n  hostPath:\n    path: \"/mnt/data\"\n---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: postgres-pvc-{{.ident}}\nspec:\n  storageClassName: {{.storageClass}}\n  accessModes:\n  - {{.accessModes}}\n  resources:\n    requests:\n      storage: {{$affif.volumeSize}}\n"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "v1",
+          "kind": "PersistentVolume",
+          "affinity": [
+            "mountpoint"
+          ],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        },
+        {
+          "id": "body-0-doc-1",
+          "apiVersion": "v1",
+          "kind": "PersistentVolumeClaim",
+          "affinity": [
+            "mountpoint"
+          ],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        }
+      ],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "postgres/volume"
+        },
+        "type": "skupperx.io/connector",
+        "spec": {
+          "config": {
+            "storageClass": {
+              "type": "string",
+              "default": "ibmc-vpc-block-10iops-tier"
+            },
+            "accessModes": {
+              "type": "string",
+              "default": "ReadWriteMany"
+            },
+            "capacity": {
+              "type": "string",
+              "default": "5Gi"
+            }
+          },
+          "interfaces": {
+            "mountpoint": {
+              "role": "mount"
+            }
+          },
+          "bodyStyle": "simple",
+          "body": [
+            {
+              "affinity": "mountpoint",
+              "targetPlatforms": [
+                "sk2",
+                "kube"
+              ],
+              "template": "---\napiVersion: v1\nkind: PersistentVolume\nmetadata:\n  name: postgres-pv-{{.ident}}\nspec:\n  storageClassName: {{.storageClass}}\n  capacity:\n    storage: {{.capacity}}\n  accessModes:\n  - {{.accessModes}}\n  hostPath:\n    path: \"/mnt/data\"\n---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: postgres-pvc-{{.ident}}\nspec:\n  storageClassName: {{.storageClass}}\n  accessModes:\n  - {{.accessModes}}\n  resources:\n    requests:\n      storage: {{$affif.volumeSize}}\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "postgres/subsystem",
+      "type": "skupperx.io/component",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "composite",
+      "configSchema": {},
+      "interfaces": [
+        {
+          "id": "postgres/subsystem.postgres",
+          "name": "postgres",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "postgres/subsystem",
+          "maxBindings": 1,
+          "data": {}
+        }
+      ],
+      "body": {
+        "database": {
+          "block": "postgres/engine",
+          "siteClasses": [
+            "hq"
+          ],
+          "bindings": {
+            "postgres": {
+              "super": "postgres"
+            }
+          }
+        },
+        "store": {
+          "block": "postgres/volume",
+          "bindings": {
+            "mountpoint": {
+              "block": "database",
+              "blockInterface": "files"
+            }
+          }
+        }
+      },
+      "generatedResources": [],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "postgres/subsystem"
+        },
+        "type": "skupperx.io/component",
+        "spec": {
+          "interfaces": {
+            "postgres": {
+              "role": "accept"
+            }
+          },
+          "bodyStyle": "composite",
+          "body": {
+            "database": {
+              "block": "postgres/engine",
+              "siteClasses": [
+                "hq"
+              ],
+              "bindings": {
+                "postgres": {
+                  "super": "postgres"
+                }
+              }
+            },
+            "store": {
+              "block": "postgres/volume",
+              "bindings": {
+                "mountpoint": {
+                  "block": "database",
+                  "blockInterface": "files"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "nearestprime/main",
+      "type": "skupperx.io/component",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "composite",
+      "configSchema": {},
+      "interfaces": [
+        {
+          "id": "nearestprime/main.request",
+          "name": "request",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "nearestprime/main",
+          "maxBindings": 1,
+          "data": {}
+        }
+      ],
+      "body": {
+        "database": {
+          "block": "postgres/subsystem",
+          "siteClasses": [
+            "hq"
+          ]
+        },
+        "worker": {
+          "block": "nearestprime",
+          "config": {
+            "replicas": 2
+          },
+          "siteClasses": [
+            "worker"
+          ],
+          "bindings": {
+            "control": {
+              "super": "request"
+            }
+          }
+        },
+        "worker-to-database": {
+          "block": "library/tcp-connection",
+          "config": {
+            "keyPrefix": "pg",
+            "protocol": "postgres",
+            "connectorType": "selector",
+            "networkPolicyOnAcceptor": true,
+            "networkPolicyOnConnector": true
+          },
+          "bindings": {
+            "connector": {
+              "block": "worker",
+              "blockInterface": "postgres"
+            },
+            "acceptor": {
+              "block": "database",
+              "blockInterface": "postgres"
+            }
+          }
+        }
+      },
+      "generatedResources": [],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "nearestprime/main"
+        },
+        "type": "skupperx.io/component",
+        "spec": {
+          "interfaces": {
+            "request": {
+              "role": "accept"
+            }
+          },
+          "bodyStyle": "composite",
+          "body": {
+            "database": {
+              "block": "postgres/subsystem",
+              "siteClasses": [
+                "hq"
+              ]
+            },
+            "worker": {
+              "block": "nearestprime",
+              "config": {
+                "replicas": 2
+              },
+              "siteClasses": [
+                "worker"
+              ],
+              "bindings": {
+                "control": {
+                  "super": "request"
+                }
+              }
+            },
+            "worker-to-database": {
+              "block": "library/tcp-connection",
+              "config": {
+                "keyPrefix": "pg",
+                "protocol": "postgres",
+                "connectorType": "selector",
+                "networkPolicyOnAcceptor": true,
+                "networkPolicyOnConnector": true
+              },
+              "bindings": {
+                "connector": {
+                  "block": "worker",
+                  "blockInterface": "postgres"
+                },
+                "acceptor": {
+                  "block": "database",
+                  "blockInterface": "postgres"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "nearestprime/container",
+      "type": "skupperx.io/toplevel",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "composite",
+      "configSchema": {},
+      "interfaces": [],
+      "body": {
+        "mainApp": {
+          "block": "nearestprime/main",
+          "siteClasses": [
+            "hq"
+          ]
+        },
+        "requestIngress": {
+          "block": "nearestprime/ingress",
+          "siteClasses": [
+            "hq"
+          ]
+        },
+        "request-ingress-to-main": {
+          "block": "library/tcp-connection",
+          "config": {
+            "keyPrefix": "http-ingress",
+            "protocol": "http",
+            "connectorType": "selector",
+            "networkPolicyOnConnector": false
+          },
+          "bindings": {
+            "acceptor": {
+              "block": "mainApp",
+              "blockInterface": "request"
+            },
+            "connector": {
+              "block": "requestIngress",
+              "blockInterface": "connector"
+            }
+          }
+        }
+      },
+      "generatedResources": [],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "nearestprime/container"
+        },
+        "type": "skupperx.io/toplevel",
+        "spec": {
+          "bodyStyle": "composite",
+          "body": {
+            "mainApp": {
+              "block": "nearestprime/main",
+              "siteClasses": [
+                "hq"
+              ]
+            },
+            "requestIngress": {
+              "block": "nearestprime/ingress",
+              "siteClasses": [
+                "hq"
+              ]
+            },
+            "request-ingress-to-main": {
+              "block": "library/tcp-connection",
+              "config": {
+                "keyPrefix": "http-ingress",
+                "protocol": "http",
+                "connectorType": "selector",
+                "networkPolicyOnConnector": false
+              },
+              "bindings": {
+                "acceptor": {
+                  "block": "mainApp",
+                  "blockInterface": "request"
+                },
+                "connector": {
+                  "block": "requestIngress",
+                  "blockInterface": "connector"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "nearestprime/ingress",
+      "type": "skupperx.io/ingress",
+      "apiVersion": "skupperx.io/compose/v1alpha1",
+      "annotations": {},
+      "bodyStyle": "simple",
+      "configSchema": {
+        "serviceName": "np-control.test",
+        "namePrefix": "control"
+      },
+      "interfaces": [
+        {
+          "id": "nearestprime/ingress.connector",
+          "name": "connector",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "nearestprime/ingress",
+          "maxBindings": 1,
+          "data": {
+            "host": "nprime",
+            "port": 8000
+          }
+        }
+      ],
+      "body": [
+        {
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "template": "---\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: {{.namePrefix}}-{{.ident}}\nspec:\n  ingressClassName: nginx\n  rules:\n    - host: {{.serviceName}}\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: {{$localif.connector.host}}\n                port:\n                  number: {{$localif.connector.port}}\n"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "Ingress",
+          "affinity": [],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        }
+      ],
+      "raw": {
+        "apiVersion": "skupperx.io/compose/v1alpha1",
+        "kind": "Block",
+        "metadata": {
+          "name": "nearestprime/ingress"
+        },
+        "type": "skupperx.io/ingress",
+        "spec": {
+          "config": {
+            "serviceName": "np-control.test",
+            "namePrefix": "control"
+          },
+          "interfaces": {
+            "connector": {
+              "role": "connect",
+              "data": {
+                "host": "nprime",
+                "port": 8000
+              }
+            }
+          },
+          "bodyStyle": "simple",
+          "body": [
+            {
+              "targetPlatforms": [
+                "sk2",
+                "kube"
+              ],
+              "template": "---\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: {{.namePrefix}}-{{.ident}}\nspec:\n  ingressClassName: nginx\n  rules:\n    - host: {{.serviceName}}\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: {{$localif.connector.host}}\n                port:\n                  number: {{$localif.connector.port}}\n"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "instances": [
+    {
+      "id": "nearestprime/container",
+      "name": "nearestprime/container",
+      "blockName": "nearestprime/container",
+      "blockType": "skupperx.io/toplevel",
+      "bodyStyle": "composite",
+      "parentId": null,
+      "depth": 0,
+      "config": {},
+      "configSchema": {},
+      "siteClasses": [],
+      "interfaces": [],
+      "generatedResources": []
+    },
+    {
+      "id": "nearestprime/container/mainApp",
+      "name": "mainApp",
+      "blockName": "nearestprime/main",
+      "blockType": "skupperx.io/component",
+      "bodyStyle": "composite",
+      "parentId": "nearestprime/container",
+      "depth": 1,
+      "config": {},
+      "configSchema": {},
+      "siteClasses": [
+        "hq"
+      ],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/mainApp.request",
+          "name": "request",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "nearestprime/main",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/mainApp"
+        }
+      ],
+      "generatedResources": []
+    },
+    {
+      "id": "nearestprime/container/mainApp/database",
+      "name": "database",
+      "blockName": "postgres/subsystem",
+      "blockType": "skupperx.io/component",
+      "bodyStyle": "composite",
+      "parentId": "nearestprime/container/mainApp",
+      "depth": 2,
+      "config": {},
+      "configSchema": {},
+      "siteClasses": [
+        "hq"
+      ],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/mainApp/database.postgres",
+          "name": "postgres",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "postgres/subsystem",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/mainApp/database"
+        }
+      ],
+      "generatedResources": []
+    },
+    {
+      "id": "nearestprime/container/mainApp/database/database",
+      "name": "database",
+      "blockName": "postgres/engine",
+      "blockType": "skupperx.io/component",
+      "bodyStyle": "simple",
+      "parentId": "nearestprime/container/mainApp/database",
+      "depth": 3,
+      "config": {},
+      "configSchema": {
+        "selectorKey": {
+          "type": "string-name",
+          "default": "block"
+        },
+        "selectorValue": {
+          "type": "string-name",
+          "default": "postgresql"
+        },
+        "POSTGRES_DB": {
+          "type": "string",
+          "default": "demo-db"
+        },
+        "POSTGRES_USER": {
+          "type": "string",
+          "default": "access"
+        },
+        "POSTGRES_PASSWORD": {
+          "type": "string",
+          "default": "demopass"
+        },
+        "imageVersion": {
+          "type": "string",
+          "default": "15"
+        }
+      },
+      "siteClasses": [
+        "hq"
+      ],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/mainApp/database/database.postgres",
+          "name": "postgres",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "postgres/engine",
+          "maxBindings": "unlimited",
+          "data": {
+            "port": 5432
+          },
+          "instanceId": "nearestprime/container/mainApp/database/database"
+        },
+        {
+          "id": "nearestprime/container/mainApp/database/database.files",
+          "name": "files",
+          "role": "mount",
+          "polarity": null,
+          "blockType": "postgres/engine",
+          "maxBindings": 1,
+          "data": {
+            "volumeSize": "5Gi"
+          },
+          "instanceId": "nearestprime/container/mainApp/database/database"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "affinity": [],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "nearestprime/container/mainApp/database/store",
+      "name": "store",
+      "blockName": "postgres/volume",
+      "blockType": "skupperx.io/connector",
+      "bodyStyle": "simple",
+      "parentId": "nearestprime/container/mainApp/database",
+      "depth": 3,
+      "config": {},
+      "configSchema": {
+        "storageClass": {
+          "type": "string",
+          "default": "ibmc-vpc-block-10iops-tier"
+        },
+        "accessModes": {
+          "type": "string",
+          "default": "ReadWriteMany"
+        },
+        "capacity": {
+          "type": "string",
+          "default": "5Gi"
+        }
+      },
+      "siteClasses": [],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/mainApp/database/store.mountpoint",
+          "name": "mountpoint",
+          "role": "mount",
+          "polarity": null,
+          "blockType": "postgres/volume",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/mainApp/database/store"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "v1",
+          "kind": "PersistentVolume",
+          "affinity": [
+            "mountpoint"
+          ],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        },
+        {
+          "id": "body-0-doc-1",
+          "apiVersion": "v1",
+          "kind": "PersistentVolumeClaim",
+          "affinity": [
+            "mountpoint"
+          ],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "nearestprime/container/mainApp/worker",
+      "name": "worker",
+      "blockName": "nearestprime",
+      "blockType": "skupperx.io/component",
+      "bodyStyle": "simple",
+      "parentId": "nearestprime/container/mainApp",
+      "depth": 2,
+      "config": {
+        "replicas": 2
+      },
+      "configSchema": {
+        "replicas": {
+          "type": "numeric",
+          "default": 1
+        },
+        "selectorKey": {
+          "type": "string",
+          "default": "application"
+        },
+        "selectorValue": {
+          "type": "string",
+          "default": "nearestprime"
+        }
+      },
+      "siteClasses": [
+        "worker"
+      ],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/mainApp/worker.postgres",
+          "name": "postgres",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "nearestprime",
+          "maxBindings": 1,
+          "data": {
+            "host": "database",
+            "port": 5432
+          },
+          "instanceId": "nearestprime/container/mainApp/worker"
+        },
+        {
+          "id": "nearestprime/container/mainApp/worker.control",
+          "name": "control",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "nearestprime",
+          "maxBindings": 1,
+          "data": {
+            "port": 8000
+          },
+          "instanceId": "nearestprime/container/mainApp/worker"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "affinity": [],
+          "targetPlatforms": [
+            "sk2",
+            "podman-sk2"
+          ],
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "nearestprime/container/mainApp/worker-to-database",
+      "name": "worker-to-database",
+      "blockName": "library/tcp-connection",
+      "blockType": "skupperx.io/connector",
+      "bodyStyle": "simple",
+      "parentId": "nearestprime/container/mainApp",
+      "depth": 2,
+      "config": {
+        "keyPrefix": "pg",
+        "protocol": "postgres",
+        "connectorType": "selector",
+        "networkPolicyOnAcceptor": true,
+        "networkPolicyOnConnector": true
+      },
+      "configSchema": {
+        "keyPrefix": {
+          "type": "string-name",
+          "description": "Prefix annotation for the generated routing keys",
+          "default": "tcp"
+        },
+        "distribution": {
+          "type": "enum",
+          "typeValues": [
+            "balanced",
+            "closest"
+          ],
+          "description": "Distribution algorithm used in the network for service traffic",
+          "default": "balanced"
+        },
+        "priority": {
+          "type": "enum",
+          "typeValues": [
+            "lowest",
+            "1",
+            "2",
+            "3",
+            "normal",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "highest"
+          ],
+          "description": "Priority used to forward service traffic through the network",
+          "default": "normal"
+        },
+        "protocol": {
+          "type": "string-name",
+          "description": "Application protocol that runs over the transport",
+          "default": "none"
+        },
+        "connectorType": {
+          "type": "enum",
+          "typeValues": [
+            "host",
+            "selector"
+          ],
+          "description": "How the connector locates target processes",
+          "default": "selector"
+        },
+        "networkPolicyOnAcceptor": {
+          "type": "bool",
+          "description": "Generate network policy to match the acceptor",
+          "default": false
+        },
+        "networkPolicyOnConnector": {
+          "type": "bool",
+          "description": "Generate network policy to match the connector",
+          "default": false
+        },
+        "vanFlowTransport": {
+          "type": "bool",
+          "description": "Generate vanFlow transport events",
+          "default": false
+        },
+        "vanFlowProtocol": {
+          "type": "bool",
+          "description": "Generate vanFlow protocol events",
+          "default": false
+        },
+        "requiredAverageRate": {
+          "type": "numeric",
+          "description": "Expected average bandwidth usage"
+        },
+        "requiredPeakRate": {
+          "type": "numeric",
+          "description": "Expected peak bandwidth usage"
+        },
+        "requiredLatency": {
+          "type": "numeric",
+          "description": "Minimum expected network latency"
+        }
+      },
+      "siteClasses": [],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/mainApp/worker-to-database.acceptor",
+          "name": "acceptor",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "library/tcp-connection",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/mainApp/worker-to-database"
+        },
+        {
+          "id": "nearestprime/container/mainApp/worker-to-database.connector",
+          "name": "connector",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "library/tcp-connection",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/mainApp/worker-to-database"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "skupper.io/v2alpha1",
+          "kind": "Connector",
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites"
+        },
+        {
+          "id": "body-0-doc-1",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "NetworkPolicy",
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites"
+        },
+        {
+          "id": "body-1-doc-0",
+          "apiVersion": "skupper.io/v2alpha1",
+          "kind": "Listener",
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites"
+        },
+        {
+          "id": "body-1-doc-1",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "NetworkPolicy",
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites"
+        }
+      ]
+    },
+    {
+      "id": "nearestprime/container/requestIngress",
+      "name": "requestIngress",
+      "blockName": "nearestprime/ingress",
+      "blockType": "skupperx.io/ingress",
+      "bodyStyle": "simple",
+      "parentId": "nearestprime/container",
+      "depth": 1,
+      "config": {},
+      "configSchema": {
+        "serviceName": "np-control.test",
+        "namePrefix": "control"
+      },
+      "siteClasses": [
+        "hq"
+      ],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/requestIngress.connector",
+          "name": "connector",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "nearestprime/ingress",
+          "maxBindings": 1,
+          "data": {
+            "host": "nprime",
+            "port": 8000
+          },
+          "instanceId": "nearestprime/container/requestIngress"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "Ingress",
+          "affinity": [],
+          "targetPlatforms": [
+            "sk2",
+            "kube"
+          ],
+          "description": ""
+        }
+      ]
+    },
+    {
+      "id": "nearestprime/container/request-ingress-to-main",
+      "name": "request-ingress-to-main",
+      "blockName": "library/tcp-connection",
+      "blockType": "skupperx.io/connector",
+      "bodyStyle": "simple",
+      "parentId": "nearestprime/container",
+      "depth": 1,
+      "config": {
+        "keyPrefix": "http-ingress",
+        "protocol": "http",
+        "connectorType": "selector",
+        "networkPolicyOnConnector": false
+      },
+      "configSchema": {
+        "keyPrefix": {
+          "type": "string-name",
+          "description": "Prefix annotation for the generated routing keys",
+          "default": "tcp"
+        },
+        "distribution": {
+          "type": "enum",
+          "typeValues": [
+            "balanced",
+            "closest"
+          ],
+          "description": "Distribution algorithm used in the network for service traffic",
+          "default": "balanced"
+        },
+        "priority": {
+          "type": "enum",
+          "typeValues": [
+            "lowest",
+            "1",
+            "2",
+            "3",
+            "normal",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "highest"
+          ],
+          "description": "Priority used to forward service traffic through the network",
+          "default": "normal"
+        },
+        "protocol": {
+          "type": "string-name",
+          "description": "Application protocol that runs over the transport",
+          "default": "none"
+        },
+        "connectorType": {
+          "type": "enum",
+          "typeValues": [
+            "host",
+            "selector"
+          ],
+          "description": "How the connector locates target processes",
+          "default": "selector"
+        },
+        "networkPolicyOnAcceptor": {
+          "type": "bool",
+          "description": "Generate network policy to match the acceptor",
+          "default": false
+        },
+        "networkPolicyOnConnector": {
+          "type": "bool",
+          "description": "Generate network policy to match the connector",
+          "default": false
+        },
+        "vanFlowTransport": {
+          "type": "bool",
+          "description": "Generate vanFlow transport events",
+          "default": false
+        },
+        "vanFlowProtocol": {
+          "type": "bool",
+          "description": "Generate vanFlow protocol events",
+          "default": false
+        },
+        "requiredAverageRate": {
+          "type": "numeric",
+          "description": "Expected average bandwidth usage"
+        },
+        "requiredPeakRate": {
+          "type": "numeric",
+          "description": "Expected peak bandwidth usage"
+        },
+        "requiredLatency": {
+          "type": "numeric",
+          "description": "Minimum expected network latency"
+        }
+      },
+      "siteClasses": [],
+      "interfaces": [
+        {
+          "id": "nearestprime/container/request-ingress-to-main.acceptor",
+          "name": "acceptor",
+          "role": "accept",
+          "polarity": null,
+          "blockType": "library/tcp-connection",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/request-ingress-to-main"
+        },
+        {
+          "id": "nearestprime/container/request-ingress-to-main.connector",
+          "name": "connector",
+          "role": "connect",
+          "polarity": null,
+          "blockType": "library/tcp-connection",
+          "maxBindings": 1,
+          "data": {},
+          "instanceId": "nearestprime/container/request-ingress-to-main"
+        }
+      ],
+      "generatedResources": [
+        {
+          "id": "body-0-doc-0",
+          "apiVersion": "skupper.io/v2alpha1",
+          "kind": "Connector",
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites"
+        },
+        {
+          "id": "body-0-doc-1",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "NetworkPolicy",
+          "affinity": [
+            "acceptor"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 acceptors on kubernetes sites"
+        },
+        {
+          "id": "body-1-doc-0",
+          "apiVersion": "skupper.io/v2alpha1",
+          "kind": "Listener",
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites"
+        },
+        {
+          "id": "body-1-doc-1",
+          "apiVersion": "networking.k8s.io/v1",
+          "kind": "NetworkPolicy",
+          "affinity": [
+            "connector"
+          ],
+          "targetPlatforms": [
+            "sk2"
+          ],
+          "description": "Interface to Skupper-v2 connectors on kubernetes sites"
+        }
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "id": "super:nearestprime/container/mainApp/database/database.postgres->nearestprime/container/mainApp/database.postgres",
+      "kind": "super",
+      "scopeId": "nearestprime/container/mainApp/database",
+      "source": {
+        "instanceId": "nearestprime/container/mainApp/database",
+        "interfaceName": "postgres"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/mainApp/database/database",
+        "interfaceName": "postgres"
+      },
+      "label": "super postgres → postgres"
+    },
+    {
+      "id": "binding:nearestprime/container/mainApp/database/store.mountpoint->nearestprime/container/mainApp/database/database.files",
+      "kind": "binding",
+      "scopeId": "nearestprime/container/mainApp/database",
+      "source": {
+        "instanceId": "nearestprime/container/mainApp/database/store",
+        "interfaceName": "mountpoint"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/mainApp/database/database",
+        "interfaceName": "files"
+      },
+      "label": "mountpoint → files"
+    },
+    {
+      "id": "super:nearestprime/container/mainApp/worker.control->nearestprime/container/mainApp.request",
+      "kind": "super",
+      "scopeId": "nearestprime/container/mainApp",
+      "source": {
+        "instanceId": "nearestprime/container/mainApp",
+        "interfaceName": "request"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/mainApp/worker",
+        "interfaceName": "control"
+      },
+      "label": "super request → control"
+    },
+    {
+      "id": "binding:nearestprime/container/mainApp/worker-to-database.connector->nearestprime/container/mainApp/worker.postgres",
+      "kind": "binding",
+      "scopeId": "nearestprime/container/mainApp",
+      "source": {
+        "instanceId": "nearestprime/container/mainApp/worker-to-database",
+        "interfaceName": "connector"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/mainApp/worker",
+        "interfaceName": "postgres"
+      },
+      "label": "connector → postgres"
+    },
+    {
+      "id": "binding:nearestprime/container/mainApp/worker-to-database.acceptor->nearestprime/container/mainApp/database.postgres",
+      "kind": "binding",
+      "scopeId": "nearestprime/container/mainApp",
+      "source": {
+        "instanceId": "nearestprime/container/mainApp/worker-to-database",
+        "interfaceName": "acceptor"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/mainApp/database",
+        "interfaceName": "postgres"
+      },
+      "label": "acceptor → postgres"
+    },
+    {
+      "id": "binding:nearestprime/container/request-ingress-to-main.acceptor->nearestprime/container/mainApp.request",
+      "kind": "binding",
+      "scopeId": "nearestprime/container",
+      "source": {
+        "instanceId": "nearestprime/container/request-ingress-to-main",
+        "interfaceName": "acceptor"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/mainApp",
+        "interfaceName": "request"
+      },
+      "label": "acceptor → request"
+    },
+    {
+      "id": "binding:nearestprime/container/request-ingress-to-main.connector->nearestprime/container/requestIngress.connector",
+      "kind": "binding",
+      "scopeId": "nearestprime/container",
+      "source": {
+        "instanceId": "nearestprime/container/request-ingress-to-main",
+        "interfaceName": "connector"
+      },
+      "target": {
+        "instanceId": "nearestprime/container/requestIngress",
+        "interfaceName": "connector"
+      },
+      "label": "connector → connector"
+    }
+  ],
+  "problems": [
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/mainApp/database.postgres or nearestprime/container/mainApp/database/database.postgres",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/mainApp/database.postgres or nearestprime/container/mainApp/database/database.postgres",
+      "details": {
+        "binding": {
+          "id": "super:nearestprime/container/mainApp/database/database.postgres->nearestprime/container/mainApp/database.postgres",
+          "kind": "super",
+          "scopeId": "nearestprime/container/mainApp/database",
+          "source": {
+            "instanceId": "nearestprime/container/mainApp/database",
+            "interfaceName": "postgres"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/mainApp/database/database",
+            "interfaceName": "postgres"
+          },
+          "label": "super postgres → postgres"
+        }
+      }
+    },
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/mainApp/database/store.mountpoint or nearestprime/container/mainApp/database/database.files",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/mainApp/database/store.mountpoint or nearestprime/container/mainApp/database/database.files",
+      "details": {
+        "binding": {
+          "id": "binding:nearestprime/container/mainApp/database/store.mountpoint->nearestprime/container/mainApp/database/database.files",
+          "kind": "binding",
+          "scopeId": "nearestprime/container/mainApp/database",
+          "source": {
+            "instanceId": "nearestprime/container/mainApp/database/store",
+            "interfaceName": "mountpoint"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/mainApp/database/database",
+            "interfaceName": "files"
+          },
+          "label": "mountpoint → files"
+        }
+      }
+    },
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/mainApp.request or nearestprime/container/mainApp/worker.control",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/mainApp.request or nearestprime/container/mainApp/worker.control",
+      "details": {
+        "binding": {
+          "id": "super:nearestprime/container/mainApp/worker.control->nearestprime/container/mainApp.request",
+          "kind": "super",
+          "scopeId": "nearestprime/container/mainApp",
+          "source": {
+            "instanceId": "nearestprime/container/mainApp",
+            "interfaceName": "request"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/mainApp/worker",
+            "interfaceName": "control"
+          },
+          "label": "super request → control"
+        }
+      }
+    },
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/mainApp/worker-to-database.connector or nearestprime/container/mainApp/worker.postgres",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/mainApp/worker-to-database.connector or nearestprime/container/mainApp/worker.postgres",
+      "details": {
+        "binding": {
+          "id": "binding:nearestprime/container/mainApp/worker-to-database.connector->nearestprime/container/mainApp/worker.postgres",
+          "kind": "binding",
+          "scopeId": "nearestprime/container/mainApp",
+          "source": {
+            "instanceId": "nearestprime/container/mainApp/worker-to-database",
+            "interfaceName": "connector"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/mainApp/worker",
+            "interfaceName": "postgres"
+          },
+          "label": "connector → postgres"
+        }
+      }
+    },
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/mainApp/worker-to-database.acceptor or nearestprime/container/mainApp/database.postgres",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/mainApp/worker-to-database.acceptor or nearestprime/container/mainApp/database.postgres",
+      "details": {
+        "binding": {
+          "id": "binding:nearestprime/container/mainApp/worker-to-database.acceptor->nearestprime/container/mainApp/database.postgres",
+          "kind": "binding",
+          "scopeId": "nearestprime/container/mainApp",
+          "source": {
+            "instanceId": "nearestprime/container/mainApp/worker-to-database",
+            "interfaceName": "acceptor"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/mainApp/database",
+            "interfaceName": "postgres"
+          },
+          "label": "acceptor → postgres"
+        }
+      }
+    },
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/request-ingress-to-main.acceptor or nearestprime/container/mainApp.request",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/request-ingress-to-main.acceptor or nearestprime/container/mainApp.request",
+      "details": {
+        "binding": {
+          "id": "binding:nearestprime/container/request-ingress-to-main.acceptor->nearestprime/container/mainApp.request",
+          "kind": "binding",
+          "scopeId": "nearestprime/container",
+          "source": {
+            "instanceId": "nearestprime/container/request-ingress-to-main",
+            "interfaceName": "acceptor"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/mainApp",
+            "interfaceName": "request"
+          },
+          "label": "acceptor → request"
+        }
+      }
+    },
+    {
+      "id": "implicit-polarity:Polarity is not explicit on nearestprime/container/request-ingress-to-main.connector or nearestprime/container/requestIngress.connector",
+      "level": "info",
+      "code": "implicit-polarity",
+      "message": "Polarity is not explicit on nearestprime/container/request-ingress-to-main.connector or nearestprime/container/requestIngress.connector",
+      "details": {
+        "binding": {
+          "id": "binding:nearestprime/container/request-ingress-to-main.connector->nearestprime/container/requestIngress.connector",
+          "kind": "binding",
+          "scopeId": "nearestprime/container",
+          "source": {
+            "instanceId": "nearestprime/container/request-ingress-to-main",
+            "interfaceName": "connector"
+          },
+          "target": {
+            "instanceId": "nearestprime/container/requestIngress",
+            "interfaceName": "connector"
+          },
+          "label": "connector → connector"
+        }
+      }
+    },
+    {
+      "id": "block-type-compatibility-todo:Block-type compatibility is not validated in this MVP",
+      "level": "info",
+      "code": "block-type-compatibility-todo",
+      "message": "Block-type compatibility is not validated in this MVP",
+      "details": {}
+    }
+  ]
+}

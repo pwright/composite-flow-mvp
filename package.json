@@ -1,0 +1,24 @@
+{
+  "name": "compose-flow-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "React Flow MVP for visualising Skupper VMS Compose blocks, interfaces, bindings, generated resources, and validation hints.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "export:sample": "node scripts/compose-to-flow.mjs public/examples/nearestprime.yaml -o tests/golden/nearestprime-flow.json",
+    "test:normalizer": "node scripts/test-normalizer.mjs"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.4.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0"
+  }
+}
