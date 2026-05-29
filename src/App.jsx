@@ -40,7 +40,8 @@ function ComposeFlowApp() {
 
   useEffect(() => {
     setIsLoading(true);
-    fetch("/examples/nearestprime.yaml")
+    const baseUrl = import.meta.env.BASE_URL;
+    fetch(`${baseUrl}examples/nearestprime.yaml`)
       .then((response) => response.text())
       .then((text) => {
         console.info("[compose-flow] loaded bundled sample YAML", { bytes: text.length });
@@ -136,7 +137,8 @@ function ComposeFlowApp() {
 
   const handleLoadExample = useCallback(() => {
     setIsLoading(true);
-    fetch("/examples/example.yaml")
+    const baseUrl = import.meta.env.BASE_URL;
+    fetch(`${baseUrl}examples/example.yaml`)
       .then((response) => response.text())
       .then((text) => {
         loadYamlFile(text, "example.yaml");
