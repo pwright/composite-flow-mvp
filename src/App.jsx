@@ -36,10 +36,67 @@ function ComposeFlowApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentFilename, setCurrentFilename] = useState("nearestprime.yaml");
   const [isDragging, setIsDragging] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
   const flow = useReactFlow();
   const { uploadFile, handleFileDrop, error: uploadError } = useFileUpload();
 
   useEffect(() => {
+    // Check if there's a shared YAML in the URL hash
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      try {
+        const decoded = decodeURIComponent(hash);
+        const decodedStr = atob(decoded);
+
+        let payload;
+        try {
+          payload = JSON.parse(decodedStr);
+        } catch (jsonError) {
+          // Might be old format (plain YAML string, not JSON)
+          payload = decodedStr;
+        }
+
+        // Check if it's the new format (object with yaml + settings) or old format (just yaml string)
+        const yaml = typeof payload === 'string' ? payload : payload.yaml;
+
+        console.info("[compose-flow] loaded shared content from URL", {
+          hashLength: hash.length,
+          decodedLength: decodedStr.length,
+          yamlBytes: yaml.length,
+          hasSettings: typeof payload === 'object'
+        });
+
+        setYamlText(yaml);
+        const parsed = parseComposeYaml(yaml);
+        setModel(parsed);
+
+        // Restore view settings if present
+        if (typeof payload === 'object' && payload.settings) {
+          const s = payload.settings;
+          if (s.view) setView(s.view);
+          if (s.layoutMode) setLayoutMode(s.layoutMode);
+          if (s.spacing !== undefined) setSpacing(s.spacing);
+          if (s.showInterfaces !== undefined) setShowInterfaces(s.showInterfaces);
+          if (s.showSuper !== undefined) setShowSuper(s.showSuper);
+          if (s.includeDescendants !== undefined) setIncludeDescendants(s.includeDescendants);
+          if (s.rootName) setRootName(s.rootName);
+          if (s.scopeId) setScopeId(s.scopeId);
+        } else {
+          // Old format - use defaults
+          setRootName(parsed.root);
+          setScopeId(parsed.root);
+        }
+
+        setCurrentFilename("shared.yaml");
+        setIsLoading(false);
+        return;
+      } catch (error) {
+        console.error("[compose-flow] failed to parse shared content from URL", error);
+        setLoadError(`Failed to load shared content from URL: ${error.message}`);
+      }
+    }
+
+    // Load default example
     setIsLoading(true);
     const baseUrl = import.meta.env.BASE_URL;
     fetch(`${baseUrl}examples/nearestprime.yaml`)
@@ -176,6 +233,97 @@ function ComposeFlowApp() {
     }
   }, []);
 
+  const handleShare = useCallback(() => {
+    try {
+      // Strip comments to reduce URL size
+      // Remove full-line comments (lines that are only whitespace + # + comment)
+      // and inline comments (trailing # comment on lines with content)
+      const stripComments = (yaml) => {
+        return yaml
+          .split('\n')
+          .map(line => {
+            // Remove full-line comments
+            if (line.trim().startsWith('#')) {
+              return null;
+            }
+            // Remove inline comments (but preserve # in quoted strings - simple heuristic)
+            // Only strip if # appears after some content and isn't in quotes
+            const hashIndex = line.indexOf('#');
+            if (hashIndex > 0) {
+              const beforeHash = line.substring(0, hashIndex);
+              // Simple check: if there are quotes before #, keep the line as-is
+              const hasQuotes = beforeHash.includes('"') || beforeHash.includes("'");
+              if (!hasQuotes) {
+                return beforeHash.trimEnd();
+              }
+            }
+            return line;
+          })
+          .filter(line => line !== null)
+          .join('\n')
+          .trim();
+      };
+
+      const yamlNoComments = stripComments(yamlText);
+
+      const payload = {
+        yaml: yamlNoComments,
+        settings: {
+          view,
+          layoutMode,
+          spacing,
+          showInterfaces,
+          showSuper,
+          includeDescendants,
+          rootName,
+          scopeId,
+        }
+      };
+
+      const jsonStr = JSON.stringify(payload);
+      const encoded = btoa(jsonStr);
+      const hash = encodeURIComponent(encoded);
+      const url = `${window.location.origin}${window.location.pathname}#${hash}`;
+
+      // Check URL length (most browsers support at least 2000 chars, modern browsers ~65k)
+      const MAX_SAFE_URL_LENGTH = 16000; // Increased since we're stripping comments
+      if (url.length > MAX_SAFE_URL_LENGTH) {
+        const sizeKB = (url.length / 1024).toFixed(1);
+        console.warn("[compose-flow] share URL is very long", {
+          length: url.length,
+          yamlOriginalSize: yamlText.length,
+          yamlStrippedSize: yamlNoComments.length,
+          reduction: `${((1 - yamlNoComments.length / yamlText.length) * 100).toFixed(1)}%`,
+          encodedSize: encoded.length
+        });
+        setLoadError(`Share URL is too long (${sizeKB}KB). Try sharing a smaller YAML file or use the "Upload YAML" button to share the file directly.`);
+        return;
+      }
+
+      // Update the current URL in the address bar
+      window.history.pushState(null, "", `#${hash}`);
+
+      navigator.clipboard.writeText(url).then(() => {
+        console.info("[compose-flow] share URL copied to clipboard", {
+          length: url.length,
+          yamlOriginalSize: yamlText.length,
+          yamlStrippedSize: yamlNoComments.length,
+          commentsRemoved: `${((1 - yamlNoComments.length / yamlText.length) * 100).toFixed(1)}%`,
+          settings: payload.settings
+        });
+        setShareSuccess(true);
+        setTimeout(() => setShareSuccess(false), 3000);
+      }).catch((error) => {
+        console.error("[compose-flow] failed to copy to clipboard", error);
+        // Fallback: show the URL in a prompt
+        prompt("Share URL (copy manually):", url);
+      });
+    } catch (error) {
+      console.error("[compose-flow] failed to generate share URL", error);
+      setLoadError(`Failed to generate share URL: ${error.message}`);
+    }
+  }, [yamlText, view, layoutMode, spacing, showInterfaces, showSuper, includeDescendants, rootName, scopeId]);
+
   const selectedBlock = useMemo(() => graph.blocks.find((block) => block.name === selectedBlockName), [graph.blocks, selectedBlockName]);
 
   return (
@@ -192,6 +340,9 @@ function ComposeFlowApp() {
           </button>
           <button onClick={handleUploadClick} className="upload-button" aria-label="Upload YAML file">
             Upload YAML
+          </button>
+          <button onClick={handleShare} className="share-button" aria-label="Generate shareable URL" disabled={isLoading}>
+            {shareSuccess ? "✓ Copied!" : "Share"}
           </button>
           <label>
             Root
@@ -255,6 +406,7 @@ function ComposeFlowApp() {
       {isLoading && <div className="loading-banner">Loading sample YAML...</div>}
       {loadError && <div className="error-banner">{loadError}</div>}
       {uploadError && <div className="error-banner">{uploadError}</div>}
+      {shareSuccess && <div className="success-banner">Share URL copied to clipboard!</div>}
 
       <main className={`workspace ${isDragging ? "is-dragging" : ""}`} onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}>
         <LibraryPanel blocks={graph.blocks} selectedBlockName={selectedBlockName} onSelectBlock={setSelectedBlockName} />

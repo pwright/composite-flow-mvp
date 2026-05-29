@@ -41,6 +41,50 @@ This document summarizes the improvements made to the Compose Flow MVP applicati
 
 ## New Features
 
+### Share Feature ✅
+- **Files**: `src/App.jsx`, `src/styles.css`
+- **Description**: Generate shareable URLs with embedded YAML content and view settings
+- **How it works**:
+  - Click "Share" button to encode current YAML + all view settings into URL hash
+  - **Strips comments** from YAML to reduce URL size (can save 30-50% on documented files)
+  - URL is automatically copied to clipboard AND updates browser address bar
+  - Share URL with anyone - they see your EXACT view (diagram + settings)
+  - Uses base64-encoded JSON in URL fragment (after #)
+  - Works on static GitHub Pages (no server required)
+- **Comment stripping**:
+  - Removes full-line comments (`# comment`)
+  - Removes trailing inline comments (`key: value  # comment`)
+  - Preserves # in quoted strings
+  - Diagram renders identically, URL is much smaller
+- **Encoded settings**:
+  - YAML content
+  - View mode (landscape, bindings, resources, validation, library)
+  - Layout mode (horizontal, vertical, grid, auto-grid)
+  - Spacing multiplier (0.5x - 8.0x)
+  - Show interfaces toggle
+  - Show super bindings toggle
+  - Include descendants toggle
+  - Root block name
+  - Current scope ID
+- **URL format**: `https://example.com/app#<base64-encoded-json>`
+- **JSON payload**: `{yaml: "...", settings: {view, layoutMode, spacing, ...}}`
+- **URL size limits**: 
+  - Safety limit: 16KB (works in all modern browsers)
+  - Most browsers support 65KB+ URLs
+  - Comment stripping typically saves 30-50% on documented YAML
+  - Example: 6.5KB YAML with comments → 4.2KB without → ~5.6KB URL
+- **UI**: Purple "Share" button, shows "✓ Copied!" on success
+- **Error handling**: Shows helpful error if URL exceeds size limit
+- **Fallback**: If clipboard fails, shows prompt dialog with URL
+- **Backward compatible**: Old URLs with just YAML still work (uses defaults for settings)
+- **Inspiration**: Similar to kroki.io's URL encoding for PlantUML diagrams
+- **Benefits**: 
+  - Easy collaboration, no file sharing needed
+  - Permanent links that capture exact view state
+  - Address bar updates so you can always copy current state
+  - Browser back/forward navigation through view changes
+  - Comments removed from URL but preserved in local editor
+
 ### Layout Direction Options ✅
 - **Files**: `src/compose/flowElements.js`, `src/App.jsx`
 - **Description**: Added four layout algorithms for flexible visualization
