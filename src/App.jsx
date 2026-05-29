@@ -29,6 +29,7 @@ function ComposeFlowApp() {
   const [showInterfaces, setShowInterfaces] = useState(false);
   const [showSuper, setShowSuper] = useState(true);
   const [layoutMode, setLayoutMode] = useState("auto-grid");
+  const [spacing, setSpacing] = useState(1.0);
   const [selection, setSelection] = useState(null);
   const [selectedBlockName, setSelectedBlockName] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -83,7 +84,8 @@ function ComposeFlowApp() {
     showResources: view === "resources",
     showSuper,
     layoutMode,
-  }), [graph, scopeId, view, includeDescendants, showInterfaces, showSuper, layoutMode]);
+    spacing,
+  }), [graph, scopeId, view, includeDescendants, showInterfaces, showSuper, layoutMode, spacing]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -230,6 +232,23 @@ function ComposeFlowApp() {
             <input type="checkbox" checked={showSuper} onChange={(event) => setShowSuper(event.target.checked)} disabled={isLoading} aria-label="Show super bindings" />
             super bindings
           </label>
+          <label>
+            Spacing
+            <div className="spacing-control">
+              <input
+                type="range"
+                min="0.5"
+                max="8.0"
+                step="0.1"
+                value={spacing}
+                onChange={(event) => setSpacing(parseFloat(event.target.value))}
+                disabled={isLoading}
+                aria-label="Adjust block spacing"
+                className="spacing-slider"
+              />
+              <span className="spacing-value">{spacing.toFixed(1)}x</span>
+            </div>
+          </label>
         </div>
       </header>
 
@@ -251,11 +270,15 @@ function ComposeFlowApp() {
               fitView
               minZoom={0.2}
               maxZoom={1.8}
-              panOnDrag={true}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={true}
+              panOnDrag={[1, 2]}
               panOnScroll={false}
               zoomOnScroll={true}
               zoomOnPinch={true}
               zoomOnDoubleClick={false}
+              selectionOnDrag={false}
               onNodeClick={(_, node) => {
                 console.info("[compose-flow] selected node", node.data);
                 setSelection({ type: "node", data: node.data });

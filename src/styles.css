@@ -41,6 +41,10 @@ button, select, textarea { font: inherit; }
 .topbar select { min-width: 180px; border-radius: 8px; border: 1px solid #475569; padding: 6px 8px; background: #1f2937; color: white; }
 .topbar select:disabled { opacity: 0.5; cursor: not-allowed; }
 .topbar input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.spacing-control { display: flex; align-items: center; gap: 8px; }
+.spacing-slider { width: 100px; accent-color: #2563eb; }
+.spacing-value { font-size: 11px; color: #94a3b8; min-width: 30px; text-align: right; }
 .checkbox { display: flex !important; grid-template-columns: auto 1fr; align-items: center; color: #e5e7eb; }
 .checkbox input { margin-right: 6px; }
 
@@ -137,6 +141,27 @@ button, select, textarea { font: inherit; }
 .edge-binding .react-flow__edge-path { stroke-width: 2; }
 .react-flow__edge-textbg { fill: rgba(255,255,255,0.92); }
 .react-flow__edge-text { font-size: 11px; font-weight: 600; }
+
+/* Enhanced MiniMap styling */
+.react-flow__minimap {
+  background: #ffffff !important;
+  border: 2px solid #2563eb !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25) !important;
+}
+
+.react-flow__minimap::before {
+  content: "MAP";
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #2563eb;
+  letter-spacing: 0.5px;
+  z-index: 10;
+  pointer-events: none;
+}
 
 .inspector dl { display: grid; grid-template-columns: 90px 1fr; gap: 6px 10px; font-size: 13px; }
 .inspector dt { color: #64748b; }

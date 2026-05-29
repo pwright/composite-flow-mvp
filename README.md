@@ -97,6 +97,7 @@ The app will automatically parse and visualize your file. The current filename i
    - **Horizontal** - Left-to-right flow
    - **Vertical** - Top-to-bottom flow
    - **Grid (3 cols)** - Fixed 3-column grid
+8. Adjust **Spacing** slider (0.5x - 2.0x) to control distance between blocks
 
 The default is deliberately scoped. Enable **include descendants** only when you need a deeper view.
 

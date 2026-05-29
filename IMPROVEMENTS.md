@@ -10,11 +10,15 @@ This document summarizes the improvements made to the Compose Flow MVP applicati
 - **Root Cause**: The `computeLayout` function was returning a box object instead of the layout Map
 - **Fix**: Changed function to return the layout Map itself, and updated child layout access to use the map
 
-### ReactFlow Panning Disabled ✅
-- **File**: `src/App.jsx:161-164`
-- **Issue**: Cannot pan/drag the canvas with click and drag (cursor suggests it's possible)
-- **Root Cause**: File drop `onDragOver` handler was preventing all drag events, including ReactFlow's pan gesture
-- **Fix**: Added check to only prevent default for actual file drops (`event.dataTransfer.types.includes('Files')`), allowing ReactFlow pan to work normally
+### ReactFlow Panning Configuration ✅
+- **Files**: `src/App.jsx:161-164`, `src/App.jsx:266-280`
+- **Issue**: Cannot pan/drag the canvas with click and drag
+- **Root Cause #1**: File drop `onDragOver` handler was preventing all drag events
+- **Fix #1**: Added check to only prevent default for actual file drops (`event.dataTransfer.types.includes('Files')`)
+- **Root Cause #2**: Default ReactFlow pan settings needed explicit configuration
+- **Fix #2**: Set `panOnDrag={[1, 2]}` to enable panning with left and middle mouse buttons
+- **Additional**: Disabled node dragging (`nodesDraggable={false}`) and box selection (`selectionOnDrag={false}`)
+- **Documentation**: See `PANNING_TROUBLESHOOTING.md` for comprehensive troubleshooting guide
 
 ### Edge Handle Connection Error ✅
 - **File**: `src/compose/flowElements.js:72-93`
@@ -47,6 +51,21 @@ This document summarizes the improvements made to the Compose Flow MVP applicati
   - **Grid (3 cols)** - Fixed 3-column grid layout
 - **UI**: Dropdown selector in top toolbar
 - **Documentation**: See `LAYOUT_GUIDE.md` for detailed comparison
+
+### Spacing Control ✅
+- **Files**: `src/compose/flowElements.js`, `src/App.jsx`, `src/styles.css`
+- **Description**: Interactive slider to adjust gaps between blocks
+- **Range**: 0.5x to 8.0x (default: 1.0x)
+- **Effect**: Multiplies ALL gaps and padding between blocks
+  - GAP_X, GAP_Y - horizontal and vertical gaps
+  - PADDING_X, PADDING_Y - side and bottom padding
+  - PADDING_TOP - top padding (header space in composite blocks)
+  - 0.5x = Compact, blocks closer together
+  - 1.0x = Normal spacing
+  - 8.0x = Very spacious, blocks far apart
+- **UI**: Slider with live value display in top toolbar
+- **Use cases**: Dense graphs, large displays, accessibility, presentations
+- **Bug Fix**: Initially PADDING_TOP wasn't scaled, causing inconsistent spacing when interfaces were shown
 
 ## Completed Improvements
 

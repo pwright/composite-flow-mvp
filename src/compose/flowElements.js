@@ -34,6 +34,7 @@ export function makeFlowElements(graph, options) {
     showResources = view === "resources",
     showSuper = true,
     layoutMode = LAYOUT_MODES.AUTO_GRID,
+    spacing = 1.0,
   } = options;
 
   console.info("[compose-flow] making flow elements", options);
@@ -50,8 +51,8 @@ export function makeFlowElements(graph, options) {
   const visibleIds = new Set();
   collectVisible(root.id, 0, maxDepth, childrenByParent, visibleIds);
 
-  const layout = computeLayout(root.id, childrenByParent, visibleIds, layoutMode);
-  assignPositions(root.id, childrenByParent, visibleIds, layout, layoutMode, 0, 0);
+  const layout = computeLayout(root.id, childrenByParent, visibleIds, layoutMode, spacing);
+  assignPositions(root.id, childrenByParent, visibleIds, layout, layoutMode, spacing, 0, 0);
 
   const nodes = [];
   emitNodes(root.id, null, childrenByParent, visibleIds, layout, instanceById, nodes, {
@@ -126,7 +127,7 @@ function emitNodes(id, parentId, childrenByParent, visibleIds, layout, instanceB
   }
 }
 
-function computeLayout(id, childrenByParent, visibleIds, layoutMode, layout = new Map()) {
+function computeLayout(id, childrenByParent, visibleIds, layoutMode, spacing, layout = new Map()) {
   const children = (childrenByParent.get(id) ?? []).filter((child) => visibleIds.has(child.id));
 
   if (!children.length) {
@@ -135,22 +136,29 @@ function computeLayout(id, childrenByParent, visibleIds, layoutMode, layout = ne
   }
 
   for (const child of children) {
-    computeLayout(child.id, childrenByParent, visibleIds, layoutMode, layout);
+    computeLayout(child.id, childrenByParent, visibleIds, layoutMode, spacing, layout);
   }
+
+  // Apply spacing multiplier to gaps and padding
+  const gapX = GAP_X * spacing;
+  const gapY = GAP_Y * spacing;
+  const paddingX = PADDING_X * spacing;
+  const paddingY = PADDING_Y * spacing;
+  const paddingTop = PADDING_TOP * spacing;
 
   let width, height;
 
   switch (layoutMode) {
     case LAYOUT_MODES.VERTICAL: {
       let maxWidth = 0;
-      let totalHeight = PADDING_TOP;
+      let totalHeight = paddingTop;
       for (const child of children) {
         const childBox = layout.get(child.id);
         maxWidth = Math.max(maxWidth, childBox.width);
-        totalHeight += childBox.height + GAP_Y;
+        totalHeight += childBox.height + gapY;
       }
-      width = Math.max(GROUP_MIN_WIDTH, PADDING_X + maxWidth + PADDING_X);
-      height = Math.max(GROUP_MIN_HEIGHT, totalHeight + PADDING_Y - GAP_Y);
+      width = Math.max(GROUP_MIN_WIDTH, paddingX + maxWidth + paddingX);
+      height = Math.max(GROUP_MIN_HEIGHT, totalHeight + paddingY - gapY);
       break;
     }
 
@@ -169,22 +177,22 @@ function computeLayout(id, childrenByParent, visibleIds, layoutMode, layout = ne
         maxChildHeight = Math.max(maxChildHeight, childBox.height);
       }
 
-      width = Math.max(GROUP_MIN_WIDTH, PADDING_X + (cols * (maxChildWidth + GAP_X)) - GAP_X + PADDING_X);
-      height = Math.max(GROUP_MIN_HEIGHT, PADDING_TOP + (rows * (maxChildHeight + GAP_Y)) - GAP_Y + PADDING_Y);
+      width = Math.max(GROUP_MIN_WIDTH, paddingX + (cols * (maxChildWidth + gapX)) - gapX + paddingX);
+      height = Math.max(GROUP_MIN_HEIGHT, paddingTop + (rows * (maxChildHeight + gapY)) - gapY + paddingY);
       break;
     }
 
     case LAYOUT_MODES.HORIZONTAL:
     default: {
-      let totalWidth = PADDING_X;
+      let totalWidth = paddingX;
       let maxHeight = 0;
       for (const child of children) {
         const childBox = layout.get(child.id);
-        totalWidth += childBox.width + GAP_X;
+        totalWidth += childBox.width + gapX;
         maxHeight = Math.max(maxHeight, childBox.height);
       }
-      width = Math.max(GROUP_MIN_WIDTH, totalWidth + PADDING_X - GAP_X);
-      height = Math.max(GROUP_MIN_HEIGHT, PADDING_TOP + maxHeight + GAP_Y);
+      width = Math.max(GROUP_MIN_WIDTH, totalWidth + paddingX - gapX);
+      height = Math.max(GROUP_MIN_HEIGHT, paddingTop + maxHeight + gapY);
       break;
     }
   }
@@ -193,22 +201,28 @@ function computeLayout(id, childrenByParent, visibleIds, layoutMode, layout = ne
   return layout;
 }
 
-function assignPositions(id, childrenByParent, visibleIds, layout, layoutMode, x, y) {
+function assignPositions(id, childrenByParent, visibleIds, layout, layoutMode, spacing, x, y) {
   const box = layout.get(id);
   box.x = x;
   box.y = y;
 
   const children = (childrenByParent.get(id) ?? []).filter((child) => visibleIds.has(child.id));
 
+  // Apply spacing multiplier to gaps and padding
+  const gapX = GAP_X * spacing;
+  const gapY = GAP_Y * spacing;
+  const paddingX = PADDING_X * spacing;
+  const paddingTop = PADDING_TOP * spacing;
+
   switch (layoutMode) {
     case LAYOUT_MODES.VERTICAL: {
-      let cursorY = PADDING_TOP;
+      let cursorY = paddingTop;
       for (const child of children) {
         const childBox = layout.get(child.id);
-        childBox.x = PADDING_X;
+        childBox.x = paddingX;
         childBox.y = cursorY;
-        cursorY += childBox.height + GAP_Y;
-        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, childBox.x, childBox.y);
+        cursorY += childBox.height + gapY;
+        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, spacing, childBox.x, childBox.y);
       }
       break;
     }
@@ -232,22 +246,22 @@ function assignPositions(id, childrenByParent, visibleIds, layout, layoutMode, x
         const childBox = layout.get(child.id);
         const col = i % cols;
         const row = Math.floor(i / cols);
-        childBox.x = PADDING_X + col * (maxChildWidth + GAP_X);
-        childBox.y = PADDING_TOP + row * (maxChildHeight + GAP_Y);
-        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, childBox.x, childBox.y);
+        childBox.x = paddingX + col * (maxChildWidth + gapX);
+        childBox.y = paddingTop + row * (maxChildHeight + gapY);
+        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, spacing, childBox.x, childBox.y);
       }
       break;
     }
 
     case LAYOUT_MODES.HORIZONTAL:
     default: {
-      let cursorX = PADDING_X;
+      let cursorX = paddingX;
       for (const child of children) {
         const childBox = layout.get(child.id);
         childBox.x = cursorX;
-        childBox.y = PADDING_TOP;
-        cursorX += childBox.width + GAP_X;
-        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, childBox.x, childBox.y);
+        childBox.y = paddingTop;
+        cursorX += childBox.width + gapX;
+        assignPositions(child.id, childrenByParent, visibleIds, layout, layoutMode, spacing, childBox.x, childBox.y);
       }
       break;
     }
