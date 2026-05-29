@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: process.env.GITHUB_PAGES ? "/compose-flow-mvp/" : "/",
+  base: process.env.GITHUB_PAGES ? "/composite-flow-mvp/" : "/",
   build: {
     rollupOptions: {
       output: {
